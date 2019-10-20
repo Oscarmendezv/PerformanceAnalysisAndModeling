@@ -1,0 +1,3129 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+
+<!--Converted with LaTeX2HTML 2002-2-1 (1.71)
+original version by:  Nikos Drakos, CBLU, University of Leeds
+* revised and updated by:  Marcus Hennecke, Ross Moore, Herb Swan
+* with significant contributions from:
+  Jens Lippmann, Marek Rouchal, Martin Wilck and others -->
+<HTML>
+<HEAD>
+<TITLE>paper</TITLE>
+<META NAME="description" CONTENT="paper">
+<META NAME="keywords" CONTENT="paper">
+<META NAME="resource-type" CONTENT="document">
+<META NAME="distribution" CONTENT="global">
+
+<META NAME="Generator" CONTENT="LaTeX2HTML v2002-2-1">
+<META HTTP-EQUIV="Content-Style-Type" CONTENT="text/css">
+
+<LINK REL="STYLESHEET" HREF="paper.css">
+
+</HEAD>
+
+<a href="http://www.usenix.org"><img src="/graphics/new_usenix.jpg" width="288" height="232" alt="Check out the new USENIX Web site." align="right"></a>
+
+
+<BODY >
+
+<P>
+
+<P>
+
+<P>
+<DIV ALIGN="CENTER">
+<FONT SIZE="+2"><B>San Ferm&#237;n: Aggregating Large Data Sets using a Binomial 
+Swap Forest<A NAME="footfnm2"
+ HREF="#fnm2"><SUP><IMG
+ WIDTH="6" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img4.png"
+ ALT="% latex2html id marker 2472
+\setcounter{footnote}{2}\fnsymbol{footnote}"></SUP></A></B></FONT></DIV>
+
+<P>
+
+<P><BR>
+
+<P>
+<DIV ALIGN="CENTER">
+<FONT SIZE="+1">Justin Cappos and John H. Hartman</FONT></DIV>
+ <DIV ALIGN="CENTER">
+<FONT SIZE="+1">Department of Computer Science, University of Arizona</FONT></DIV>
+ 
+<P><P><BR>
+
+<P>
+
+<P>
+
+<H2><A NAME="SECTION00001000000000000000">
+Abstract</A>
+</H2>
+
+<P>
+San Ferm&#237;n is a system for aggregating large amounts of data
+from the nodes of large-scale distributed systems.
+Each San Ferm&#237;n node 
+individually
+computes the aggregated result by
+swapping data with other nodes to
+dynamically
+create its own binomial tree. 
+Nodes that fall behind abort their trees, thereby reducing overhead. 
+Having each node create its own binomial tree makes San Ferm&#237;n 
+highly resilient to failures and ensures that 
+the internal nodes of the tree have high capacity,
+thereby reducing completion time.
+
+<P>
+Compared to existing solutions, San Ferm&#237;n handles large aggregations better, 
+has higher completeness when nodes fail,
+computes the result faster, 
+and has better scalability.
+We analyze the completion time, completeness,
+and overhead of San Ferm&#237;n versus existing solutions using analytical
+models, simulation, and experimentation with a prototype built on 
+peer-to-peer system
+deployed on PlanetLab.  
+Our evaluation shows that San Ferm&#237;n is scalable both in the number of
+nodes and in the aggregated data size.
+San Ferm&#237;n aggregates large amounts of data
+significantly faster than existing solutions:
+compared to SDIMS, an existing aggregation system, San Ferm&#237;n computes
+a 1MB result from 100 PlanetLab nodes in 61-76% of the time and from 
+2-6 times as many nodes.
+Even if 10% of the nodes fail during aggregation, San Ferm&#237;n 
+still includes the data from 97% of the nodes in the result and 
+does so
+faster than the underlying peer-to-peer system recovers from failures.
+
+
+<H1><A NAME="SECTION00010000000000000000">
+1 Introduction</A>
+</H1>
+
+<P>
+San Ferm&#237;n aggregates large amounts of data from distributed nodes
+quickly and accurately. As distributed systems become more prevalent
+this is an increasingly important operation: for example, CERT logs
+about 1/4 TB of data daily on approximately 
+100 nodes distributed throughout the 
+Internet&nbsp;[<A
+ HREF="paper.html#CERT">9</A>].  
+Analysts use these logs to
+detect anomalous behavior that signals
+worms and other attacks, and must do so quickly to minimize damage.   
+An example query might request the number of flows to and 
+from each TCP/UDP port (to detect an anomalous distribution of traffic 
+indicating an attack).   In this example there are many flow
+counters per node and the requester is interested in the sum of each 
+counter across all nodes.
+It is important that the data be aggregated quickly, as time is of the essence
+when responding to attacks,
+and accurately, as the aggregated result
+should include data from as
+many nodes as possible and the data from each node
+exactly once. The 
+more accurate the result, the more
+useful it is.
+
+<P>
+In San Ferm&#237;n the properties of current networks are leveraged to build an
+efficient content aggregation network for large data sizes.   
+Since core bandwidth is typically not the bottleneck&nbsp;[<A
+ HREF="paper.html#MPLS">12</A>], San Ferm&#237;n allows disjoint
+pairs of nodes to communicate simultaneously, as they will likely not
+compete for bandwidth. 
+A San Ferm&#237;n node also sends and receives data simultaneously, 
+making efficient use of full-duplex links. 
+The result is that 
+San Ferm&#237;n 
+aggregates large data sets
+significantly faster than existing solutions, on average returning a 1 MB 
+aggregation from 100 PlanetLab nodes in 61-76%  the time and from 
+approximately 2-6 times as many nodes as SDIMS,
+an existing aggregation system.
+San Ferm&#237;n is highly failure resistant and
+with 10% node failures during aggregation
+still includes the data from over 97% of the nodes in the result --
+and in most cases does so faster than the underlying peer-to-peer
+system recovers
+from failures.
+
+<P>
+San Ferm&#237;n uses a <I>binomial swap forest</I> to perform the aggregation,
+which is well-suited to tolerate failures and take advantage of
+the characteristics
+of the Internet.
+In a 
+binomial swap forest each node creates its own binomial tree by
+repeatedly swapping aggregate data with other nodes.   
+This makes San Ferm&#237;n highly resilient to failures because
+a particular node's data is aggregated by an exponentially increasing number of
+nodes as the aggregation progresses.
+Similarly, the number of nodes included in a particular node's aggregate data 
+also increases exponentially as the aggregation progresses.  
+Each node creates its own binomial swap tree; 
+as long 
+as at least one node remains alive San Ferm&#237;n will produce a (possibly incomplete) 
+aggregation result.
+
+<P>
+Having each node create its own binomial swap tree is highly fault-tolerant 
+and fast, but it can lead to excessive overhead.
+San Ferm&#237;n reduces overhead by 
+pruning small trees that fall
+behind larger trees during the aggregation, as the small trees are unlikely to 
+compute the result first and therefore increase 
+overhead without improving speed or accuracy. 
+When a tree falls behind San Ferm&#237;n prunes it --
+the name San Ferm&#237;n is derived from this behavior, 
+after the festival with the running of the bulls in Pampalona.
+
+<P>
+
+<H2><A NAME="SECTION00011000000000000000">
+1.1 Applications</A>
+</H2>
+
+<P>
+In addition to CERT, 
+San Ferm&#237;n also
+benefits other applications that aggregate large amounts of
+data from many nodes:
+
+<P>
+<B>Software Debugging</B> Recent work on software 
+debugging&nbsp;[<A
+ HREF="paper.html#Liblit:2004:CBI">19</A>] leverages
+execution counts for individual instructions.
+This work shows that the total of all the instruction 
+execution counts across multiple nodes helps
+the developer quickly identify bugs. 
+
+<P>
+<B>System Monitoring</B> Administrators of distributed systems
+must process the logs of 
+thousands of nodes around the world to troubleshoot difficulties, track 
+intrusions, or monitor performance.   
+
+<P>
+<B>Distributed Databases</B> 
+A common query
+in relational databases is
+GROUP BY&nbsp;[<A
+ HREF="paper.html#DBMS">25</A>].   
+This query combines table rows containing the 
+same attribute value using an aggregate operator (such as SUM).    The query 
+result contains one table row per unique attribute value.   In distributed 
+databases different nodes may store rows with the same attribute value.
+The values at these rows must be combined and returned to the requester.   
+
+<P>
+These applications are similar because they aggregate 
+large amounts of data from many nodes.
+For example, for the CERT example, finding the distribution 
+of ports on UDP and TCP flows seen in the last hour  
+takes 512 KB (assuming 4 byte counters).   In the software debugging application, tracking a small 
+application like <TT>bc</TT> requires 40KB of counters.   Larger applications
+may require more than 1MB of counters.
+The target environments
+may contain hundreds or thousands of nodes, forcing the aggregation to 
+tolerate failures. 
+
+<P>
+The aggregation function has similar characteristics for these applications
+as well.   The aggregation functions are commutative and associative but may 
+be sensitive to duplication.  Typically, the aggregate data from multiple 
+nodes is approximately the same size as any individual node's data.   
+
+<P>
+The aggregation functions may also be sensitive to partial data in the result.
+If, for example, the data from a node is split and aggregated
+separately using different 
+trees, the root may receive only some of the node's data.   For 
+applications that want distributions of data (such as the target 
+applications) it may be important to either have all of a 
+node's data or none of it.   
+
+<P>
+In some cases it may be possible to compress aggregate data before transmission
+to reduce space.   Such techniques are complimentary to this work. 
+Some environments may require administrative isolation.   This work assumes
+that the aggregation occurs in a single administrative domain with cooperative
+nodes.
+
+<P>
+
+<H1><A NAME="SECTION00020000000000000000">
+2 Binomial Swap Forest</A>
+</H1>
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="binomial-tree"></A><A NAME="210"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 1:</STRONG>
+A 16-node binomial tree created by making tree B a child of 
+tree A. 
+The children of the root are themselves binomial trees of size 1, 2, 4, and
+8.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER"><IMG WIDTH="400" SRC="binomialswap.eps.gif">
+</DIV></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+A binomial swap forest is a novel technique for aggregating data in which each node
+individually computes the aggregate result by repeatedly swapping (exchanging) aggregate data 
+with other nodes. Two nodes swap data by sending each other the data they have aggregated so far,
+allowing each to compute the aggregation of both nodes' data.
+The swaps are organized so that a node only swaps with one other node at a time, and 
+each swap roughly doubles the number of nodes whose data is included in a 
+node's aggregate data, so that the nodes will compute
+the aggregate result in 
+roughly <IMG
+ WIDTH="51" HEIGHT="32" ALIGN="MIDDLE" BORDER="0"
+ SRC="img5.png"
+ ALT="$\log(N)$"> swaps.
+If the nodes of the aggregation are represented as nodes in a graph,
+and swaps as edges in the graph, the 
+sequence of swaps performed by a particular node form a binomial tree with
+that node at the root.
+As a reminder, in a binomial tree with <IMG
+ WIDTH="20" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img6.png"
+ ALT="$2^n$"> nodes the children of the root  
+are themselves binomial trees with <IMG
+ WIDTH="37" HEIGHT="16" ALIGN="BOTTOM" BORDER="0"
+ SRC="img7.png"
+ ALT="$2^{n-1}$">, <IMG
+ WIDTH="37" HEIGHT="16" ALIGN="BOTTOM" BORDER="0"
+ SRC="img8.png"
+ ALT="$2^{n-2}$">..., <IMG
+ WIDTH="19" HEIGHT="16" ALIGN="BOTTOM" BORDER="0"
+ SRC="img9.png"
+ ALT="$2^1$">, and <IMG
+ WIDTH="19" HEIGHT="16" ALIGN="BOTTOM" BORDER="0"
+ SRC="img10.png"
+ ALT="$2^0$"> nodes
+(Figure&nbsp;<A HREF="#binomial-tree">1</A>). 
+As the figure illustrates, 
+a binomial tree with <IMG
+ WIDTH="20" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img6.png"
+ ALT="$2^n$"> nodes can be made from two binomial trees with <IMG
+ WIDTH="37" HEIGHT="16" ALIGN="BOTTOM" BORDER="0"
+ SRC="img7.png"
+ ALT="$2^{n-1}$"> nodes
+by making
+one tree a child of the other tree's root .
+The collection of binomial swap trees constructed by the nodes during a single aggregation is a
+<I>binomial swap forest</I>. 
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="fig-abcd"></A><A NAME="220"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 2:</STRONG>
+The binomial swap forest created by aggregating data from 
+nodes A, B, C, and D.
+Each tree represents the sequence of swaps its root node performed
+while aggregating the data.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER"><IMG WIDTH="400" SRC="abcd.eps.gif">
+</DIV></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+For example, 
+consider data aggregation from four nodes: A, B, C, and D (Figure&nbsp;<A HREF="#fig-abcd">2</A>).
+Each node initially finds a partner with whom to swap data. Suppose A swaps with B
+and C swaps with D, so that afterwards A and B have the aggregate data AB,
+while C and D have the aggregate data CD. To complete the aggregation each node
+must swap data with a node from the other pair. If A swaps with C and B
+swaps with D, then every node will have the aggregate data ABCD . 
+
+<P>
+The swaps
+must be carefully organized 
+so that the series of swaps by a node produces the correct aggregated result. 
+Consider aggregating data from <IMG
+ WIDTH="56" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img11.png"
+ ALT="$N = 2^n$"> nodes each with a
+unique ID in the range <IMG
+ WIDTH="71" HEIGHT="32" ALIGN="MIDDLE" BORDER="0"
+ SRC="img12.png"
+ ALT="$[0..N-1]$"> (we will later relax these constraints). 
+Since each swap doubles the amount of aggregate data a node has, just prior to the last swap
+a node must have the data from half of the nodes in the system, and must swap with a node
+that has the data from the other half of the nodes. 
+This can be achieved by swapping based on node IDs; specifically, if the node ID for a node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> 
+starts with
+a 0 then node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> should aggregate data from all nodes that start with a 0 prior to the
+last swap, then swap with a node <IMG
+ WIDTH="12" HEIGHT="31" ALIGN="MIDDLE" BORDER="0"
+ SRC="img14.png"
+ ALT="$y$"> whose node ID starts with 1 that has aggregated
+data from all nodes that start with a 1.
+Note that it doesn't matter
+<I>which</I> node <IMG
+ WIDTH="12" HEIGHT="31" ALIGN="MIDDLE" BORDER="0"
+ SRC="img14.png"
+ ALT="$y$"> node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> swaps with as long as its node ID starts with a 1 and it has successfully
+aggregated data from its half of the node ID space.
+Also note that node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> should swap with exactly one node from the other half of the address space,
+otherwise the result may contain duplicate data.
+Recursing on this idea, assuming that node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> starts with 00 then in the penultimate swap it must swap with
+a node whose node ID starts with 01 thus aggregating data from all
+nodes that start with 0. Similarly, 
+in the very first swap node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> swaps with the node whose node ID differs in only the 
+least-significant bit.
+This is the general idea behind
+using a binomial swap forest to aggregate data -- each node starts
+by swapping data with the node
+whose node ID differs in only the least-significant bit
+and works its way through the node ID space until
+it swaps with a node whose node ID differs in the most-significant bit. 
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="binomial-swap"></A><A NAME="289"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 3:</STRONG>
+One way 6 nodes can construct binomial swap forest. Each node swaps data with a
+node in each <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">  starting with <!-- MATH
+ $\ensuremath{\hat{L}_{m}}$
+ -->
+<IMG
+ WIDTH="27" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img16.png"
+ ALT="\ensuremath{\hat{L}_{m}}">  and ending with <!-- MATH
+ $\ensuremath{\hat{L}_{0}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img17.png"
+ ALT="\ensuremath{\hat{L}_{0}}">.</CAPTION>
+<TR><TD><IMG
+ WIDTH="288" HEIGHT="126" BORDER="0"
+ SRC="img18.png"
+ ALT="\begin{figure}\centering
+\begin{small}
+\begin{tabular}{\vert l\vert\vert l\vert ...
+...0 \\
+111 &amp; Swap 110 &amp; Abort &amp; \\
+\hline
+\end{tabular}\end{small}
+\end{figure}"></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="binomial-swap-tree"></A><A NAME="290"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 4:</STRONG>
+The binomial swap forest resulting from the construction in Figure&nbsp;<A HREF="#binomial-swap">3</A>. 
+Nodes 001 and 111 aborted.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER"><IMG WIDTH="600" SRC="binomialforestsquashed.eps.gif">
+</DIV></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+Before describing this process in more detail it is useful to define the <I>longest common prefix</I>,
+<!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> of two nodes, which is the number of high-order bits the two node IDs have in common. 
+We will use the notation <!-- MATH
+ $\hat{L}(x,y) = k$
+ -->
+<IMG
+ WIDTH="82" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img20.png"
+ ALT="$\hat{L}(x,y) = k$"> to mean that the <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> of nodes <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> and <IMG
+ WIDTH="12" HEIGHT="31" ALIGN="MIDDLE" BORDER="0"
+ SRC="img14.png"
+ ALT="$y$"> is <IMG
+ WIDTH="13" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img21.png"
+ ALT="$k$"> bits long.
+With respect to a particular node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$">, we use the notation <!-- MATH
+ $\ensuremath{\hat{L}_{k}^{x}}$
+ -->
+<IMG
+ WIDTH="23" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img22.png"
+ ALT="\ensuremath{\hat{L}_{k}^{x}}">  to indicate the set of nodes
+whose longest common prefix with node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> is <IMG
+ WIDTH="13" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img21.png"
+ ALT="$k$"> bits long.
+We shorten this to <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">  when it is clear which node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> is being referred to.
+
+<P>
+Using this notation, to aggregate data using a binomial swap tree in a system
+with <IMG
+ WIDTH="56" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img11.png"
+ ALT="$N = 2^n$"> nodes a node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> must first swap data with a node in <!-- MATH
+ $\ensuremath{\hat{L}_{n-1}^{x}}$
+ -->
+<IMG
+ WIDTH="40" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img23.png"
+ ALT="\ensuremath{\hat{L}_{n-1}^{x}}">  (there is only 1 node
+in this set), then swap data with a node in <!-- MATH
+ $\ensuremath{\hat{L}_{n-2}^{x}}$
+ -->
+<IMG
+ WIDTH="40" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img24.png"
+ ALT="\ensuremath{\hat{L}_{n-2}^{x}}">, etc., until eventually
+swapping data with a node in <!-- MATH
+ $\ensuremath{\hat{L}_{0}^{x}}$
+ -->
+<IMG
+ WIDTH="23" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img25.png"
+ ALT="\ensuremath{\hat{L}_{0}^{x}}">  (there are <IMG
+ WIDTH="37" HEIGHT="16" ALIGN="BOTTOM" BORDER="0"
+ SRC="img7.png"
+ ALT="$2^{n-1}$"> nodes in this set). 
+Again, node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> swaps with only one node in <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">  to prevent duplication in the result. 
+Each set <!-- MATH
+ $\ensuremath{\hat{L}_{k}^{x}}$
+ -->
+<IMG
+ WIDTH="23" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img22.png"
+ ALT="\ensuremath{\hat{L}_{k}^{x}}">  has <IMG
+ WIDTH="54" HEIGHT="20" ALIGN="BOTTOM" BORDER="0"
+ SRC="img26.png"
+ ALT="$2^{n-k-1}$"> nodes,
+and 
+node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> will perform <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img27.png"
+ ALT="$n$"> swaps. Duplication cannot happen because
+when node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> swaps data with node <IMG
+ WIDTH="12" HEIGHT="31" ALIGN="MIDDLE" BORDER="0"
+ SRC="img14.png"
+ ALT="$y$"> from set <!-- MATH
+ $\ensuremath{\hat{L}_{k}^{x}}$
+ -->
+<IMG
+ WIDTH="23" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img22.png"
+ ALT="\ensuremath{\hat{L}_{k}^{x}}">, node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> receives the data
+from nodes whose longest common prefix with node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> is exactly <IMG
+ WIDTH="13" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img21.png"
+ ALT="$k$"> bits long.
+To see why this is true, consider that <IMG
+ WIDTH="12" HEIGHT="31" ALIGN="MIDDLE" BORDER="0"
+ SRC="img14.png"
+ ALT="$y$"> has data from all nodes
+whose longest common prefix with <IMG
+ WIDTH="12" HEIGHT="31" ALIGN="MIDDLE" BORDER="0"
+ SRC="img14.png"
+ ALT="$y$"> is at least <IMG
+ WIDTH="40" HEIGHT="30" ALIGN="MIDDLE" BORDER="0"
+ SRC="img28.png"
+ ALT="$k+1$"> bits.   This
+means that the first <IMG
+ WIDTH="13" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img21.png"
+ ALT="$k$"> bits of these nodes are the same as <IMG
+ WIDTH="12" HEIGHT="31" ALIGN="MIDDLE" BORDER="0"
+ SRC="img14.png"
+ ALT="$y$"> and since <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> 
+differs with <IMG
+ WIDTH="12" HEIGHT="31" ALIGN="MIDDLE" BORDER="0"
+ SRC="img14.png"
+ ALT="$y$"> in the <IMG
+ WIDTH="13" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img21.png"
+ ALT="$k$">th bit, <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> must differ with these nodes in the 
+<IMG
+ WIDTH="13" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img21.png"
+ ALT="$k$">th bit.
+
+<P>
+The discussion so far assumes that the number of nodes in the system is a power of 2,
+that node IDs are in the range <IMG
+ WIDTH="71" HEIGHT="32" ALIGN="MIDDLE" BORDER="0"
+ SRC="img12.png"
+ ALT="$[0..N-1]$">, that 
+each node knows how to contact every other node in the system directly, and that
+nodes do not fail. It also ignores the overhead of having each node construct
+its own binomial swap tree when only a single tree is necessary to compute the aggregated
+result. We can relax the first of these restrictions to allow the number of nodes to not
+be a power of 2, but it introduces several complications. First, 
+the resulting binomial trees will not be complete, although they will produce the
+correct aggregate result. 
+Consider data aggregation in
+a system with only
+nodes A, B, and C. Suppose A initially swaps with B. C 
+must wait for A and B to finish swapping before it can swap with one of them.
+Suppose C subsequently swaps with A, so that both A and C have the aggregate data ABC,
+while node B only has AB. A and C 
+successfully computed the result although the binomial trees they constructed are not
+complete. B was unable to construct a tree containing all the nodes.
+
+<P>
+Second, 
+some nodes may not be able to find partners with whom to swap, as is the case with
+node B in the previous example. 
+More generally, 
+consider a collection of nodes whose longest common prefix <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> is <IMG
+ WIDTH="13" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img21.png"
+ ALT="$k$"> bits long.
+To aggregate the data for that prefix the subset of nodes whose <!-- MATH
+ $\ensuremath{\hat{L}_{k+1}}$
+ -->
+<IMG
+ WIDTH="39" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img29.png"
+ ALT="\ensuremath{\hat{L}_{k+1}}">  ends with a 0
+must swap data with the subset whose <!-- MATH
+ $\ensuremath{\hat{L}_{k+1}}$
+ -->
+<IMG
+ WIDTH="39" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img29.png"
+ ALT="\ensuremath{\hat{L}_{k+1}}">  ends with a 1. If these subsets are not
+of equal size, then some nodes will be unable to find a partner. 
+Only if <IMG
+ WIDTH="18" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img30.png"
+ ALT="$N$"> is a power of 2 can the two subsets have equal numbers of nodes,
+otherwise some nodes will be unable to find a partner and must abort their aggregations.
+
+<P>
+Third, if the number of nodes is not a power of 2 then some node IDs will
+not be assigned to nodes. This can result in no nodes having a particular prefix,
+so that when other nodes try to swap with nodes having that prefix they cannot
+find a partner with whom to swap. Instead of aborting those nodes should instead
+simply skip the prefix as it is empty. This is most likely to occur when the nodes
+initially start the aggregation process, as for any node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> <!-- MATH
+ $\ensuremath{\hat{L}_{n}^{x}}$
+ -->
+<IMG
+ WIDTH="23" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img31.png"
+ ALT="\ensuremath{\hat{L}_{n}^{x}}">  corresponds
+to exactly one node ID, which may not be assigned to a node. Therefore, instead of
+starting the aggregation with <!-- MATH
+ $\ensuremath{\hat{L}_{n}^{x}}$
+ -->
+<IMG
+ WIDTH="23" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img31.png"
+ ALT="\ensuremath{\hat{L}_{n}^{x}}">  node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> should instead 
+initially swap with a node in <!-- MATH
+ $\ensuremath{\hat{L}_{m}^{x}}$
+ -->
+<IMG
+ WIDTH="27" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img32.png"
+ ALT="\ensuremath{\hat{L}_{m}^{x}}">  where <IMG
+ WIDTH="18" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img33.png"
+ ALT="$m$"> is the longest prefix 
+length for which <!-- MATH
+ $\ensuremath{\hat{L}_{m}^{x}}$
+ -->
+<IMG
+ WIDTH="27" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img32.png"
+ ALT="\ensuremath{\hat{L}_{m}^{x}}">  is not empty.
+
+<P>
+As an example of aggregating data when <IMG
+ WIDTH="18" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img30.png"
+ ALT="$N$"> is not a power of 2, suppose 
+that there are 6 
+nodes: 000, 001, 010, 101, 110, and 111 (Figures&nbsp;<A HREF="#binomial-swap">3</A> and <A HREF="#binomial-swap-tree">4</A>).
+Each node <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> swaps data with a node in each <!-- MATH
+ $\ensuremath{\hat{L}_{k}^{x}}$
+ -->
+<IMG
+ WIDTH="23" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img22.png"
+ ALT="\ensuremath{\hat{L}_{k}^{x}}">  starting with
+<!-- MATH
+ $\ensuremath{\hat{L}_{m}^{x}}$
+ -->
+<IMG
+ WIDTH="27" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img32.png"
+ ALT="\ensuremath{\hat{L}_{m}^{x}}">  and ending with <!-- MATH
+ $\ensuremath{\hat{L}_{0}^{x}}$
+ -->
+<IMG
+ WIDTH="23" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img25.png"
+ ALT="\ensuremath{\hat{L}_{0}^{x}}">.
+There are many valid binomial swap forests that could be constructed by these nodes
+aggregating data; in this example 000 first swaps with 001 and 110 swaps with 
+111.   <!-- MATH
+ $\ensuremath{\hat{L}_{2}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img34.png"
+ ALT="\ensuremath{\hat{L}_{2}}">  is empty for 010 and 101, so they swap with nodes in <!-- MATH
+ $\ensuremath{\hat{L}_{1}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img35.png"
+ ALT="\ensuremath{\hat{L}_{1}}">:
+000 swaps with 010 and 101 swaps with 111.   001 and 110 cannot find a node 
+in <!-- MATH
+ $\ensuremath{\hat{L}_{1}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img35.png"
+ ALT="\ensuremath{\hat{L}_{1}}">  with whom to swap (since 010 swapped with 000 and 101 swapped with
+with 111) and they stop aggregating data.   In the final step the remaining nodes swap 
+with a node in <!-- MATH
+ $\ensuremath{\hat{L}_{0}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img17.png"
+ ALT="\ensuremath{\hat{L}_{0}}">: 000 swaps with 101 and 010 swaps with 111.  
+
+<P>
+The swap operations in a binomial swap forest are
+only partially ordered - the only constraints are that nodes must
+swap with a node in each <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">  in order starting with <!-- MATH
+ $\ensuremath{\hat{L}_{m}}$
+ -->
+<IMG
+ WIDTH="27" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img16.png"
+ ALT="\ensuremath{\hat{L}_{m}}">  and ending with <!-- MATH
+ $\ensuremath{\hat{L}_{0}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img17.png"
+ ALT="\ensuremath{\hat{L}_{0}}">.
+It is possible that in 
+Figure&nbsp;<A HREF="#binomial-swap">3</A> that nodes 000 and 010 will finish swapping
+before 111 and 110 finish swapping.   This means that the only synchronization
+between nodes is when they swap data (there is no global synchronization between nodes).
+
+<P>
+San Ferm&#237;n makes use of an underlying peer-to-peer communication
+system to handle both gaps in the node ID space and nodes that are 
+not able to communicate directly. It uses time-outs to deal with node failures,
+and employs a pruning algorithm to reduce overhead by eliminating unprofitable trees.
+Section&nbsp;<A HREF="#sec:description">4</A> these aspects of San Ferm&#237;n in more detail.
+
+<H1><A NAME="SECTION00030000000000000000"></A>
+<A NAME="sec:analysis"></A><BR>
+3 Analytic Comparison
+</H1>
+
+<P>
+Several techniques have been proposed for 
+content aggregation.   The most straightforward is to have a single
+node retrieve all data and then aggregate.
+Some techniques like SDIMS&nbsp;[<A
+ HREF="paper.html#SDIMS">31</A>] build a tree
+with high-degree nodes that are likely to have simultaneous connections.
+To provide
+resilience against failures, data is retransmitted when nodes fail.
+Seaweed&nbsp;[<A
+ HREF="paper.html#Seaweed">22</A>] also has high-degree nodes with a similar structure
+to SDIMS,
+but uses a supernode approach in which the data on internal nodes are 
+replicated to tolerate failures.   
+
+<P>
+
+<H2><A NAME="SECTION00031000000000000000">
+3.1 Analytic Models</A>
+</H2>
+
+<P>
+Analytic models of these techniques enable comparison of their
+general characteristics.
+The models assume that any node that fails
+during the aggregation does not recover, and any node that comes online 
+during the aggregation does not join it.   The probability of a given
+node failing in the next second is <IMG
+ WIDTH="11" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img36.png"
+ ALT="$c$">.
+Node failures are assumed to be independent.
+A node that fails while sending data causes the partial data to be
+discarded.  Inter-node latencies and bandwidths are a uniform <IMG
+ WIDTH="9" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img37.png"
+ ALT="$l$"> and <IMG
+ WIDTH="11" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img38.png"
+ ALT="$b$">,
+respectively.  The bandwidth <IMG
+ WIDTH="11" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img38.png"
+ ALT="$b$"> is per-node, 
+which is consistent with the 
+bandwidth bottleneck existing at the edges of the network 
+and not in the middle.   Each node contributes data of size <IMG
+ WIDTH="11" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img39.png"
+ ALT="$s$"> and
+the aggregation function produces aggregate data of size <IMG
+ WIDTH="11" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img39.png"
+ ALT="$s$">.
+Per-packet, peer-to-peer, and connection establishment costs are ignored for 
+all techniques.   
+
+<P>
+Other parameters such as the amount of data 
+aggregated, speed and capacity of the links, etc. 
+are derived from real-world measurements (Table&nbsp;<A HREF="#table-model">1</A>).
+The bandwidth measurements were gathered by transferring a 1MB file to all
+PlanetLab nodes from several well-connected nodes.   The average bandwidth 
+was within 100 Kbps for all runs, independent of the choice of source node.
+This means that well-connected nodes have roughly
+the same bandwidth to other nodes regardless of network location.
+The average of all runs is used in 
+Table&nbsp;<A HREF="#table-model">1</A>.
+
+<P>
+<BR><P></P>
+<DIV ALIGN="CENTER"><A NAME="652"></A>
+<TABLE>
+<CAPTION><STRONG>Table 1:</STRONG>
+Model parameters. </CAPTION>
+<TR><TD><DIV ALIGN="CENTER"><TABLE CELLPADDING=3 BORDER="1">
+<TR><TD></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Description </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Value </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Source </FONT></TD>
+</TR>
+<TR><TD ALIGN="CENTER"><FONT SIZE="-1"> 
+
+<IMG
+ WIDTH="18" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img30.png"
+ ALT="$N$"> </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Number of nodes </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> 300,000 </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> CorpNet&nbsp;[<A
+ HREF="paper.html#Seaweed">22</A>] </FONT></TD>
+</TR>
+<TR><TD ALIGN="CENTER"><FONT SIZE="-1"> 
+<IMG
+ WIDTH="11" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img38.png"
+ ALT="$b$"> </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Bandwidth </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> 1.105Mbps </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> PlanetLab </FONT></TD>
+</TR>
+<TR><TD ALIGN="CENTER"><FONT SIZE="-1"> 
+<IMG
+ WIDTH="9" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img37.png"
+ ALT="$l$"> </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Latency </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> 190ms </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> AllSitesPing&nbsp;[<A
+ HREF="paper.html#AllPairsPing">2</A>] </FONT></TD>
+</TR>
+<TR><TD ALIGN="CENTER"><FONT SIZE="-1"> 
+<IMG
+ WIDTH="11" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img39.png"
+ ALT="$s$"> </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Data size </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> 1MB </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> CERT&nbsp;[<A
+ HREF="paper.html#CERT">9</A>] </FONT></TD>
+</TR>
+<TR><TD ALIGN="CENTER"><FONT SIZE="-1"> 
+<IMG
+ WIDTH="11" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img36.png"
+ ALT="$c$"> </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Per node failure prob. </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> <IMG
+ WIDTH="72" HEIGHT="16" ALIGN="BOTTOM" BORDER="0"
+ SRC="img40.png"
+ ALT="$5.5*10^{-6}$"> / sec. </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Farsite&nbsp;[<A
+ HREF="paper.html#Seaweed">22</A>] </FONT></TD>
+</TR>
+<TR><TD ALIGN="CENTER"><FONT SIZE="-1"> 
+<IMG
+ WIDTH="11" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img41.png"
+ ALT="$r$"> </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Supernode replicas </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> 4 </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Seaweed&nbsp;[<A
+ HREF="paper.html#Seaweed">22</A>] </FONT></TD>
+</TR>
+<TR><TD ALIGN="CENTER"><FONT SIZE="-1"> 
+<IMG
+ WIDTH="12" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img42.png"
+ ALT="$d$"> </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Node degree </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> 16 </FONT></TD>
+<TD ALIGN="LEFT"><FONT SIZE="-1"> Seaweed&nbsp;[<A
+ HREF="paper.html#Seaweed">22</A>] </FONT></TD>
+</TR>
+</TABLE></DIV>
+
+
+<P>
+
+<A NAME="table-model"></A>
+<P>
+</TD></TR>
+</TABLE>
+</DIV><P></P><BR>
+
+<P>
+For each technique its
+completion time, completeness (number of nodes whose data is included in the
+aggregate result), and
+overhead are analyzed.   Rather than isolating all of the parameters for
+each technique, the data size and number of nodes are varied to
+show their effect.
+
+<P>
+
+<H2><A NAME="SECTION00032000000000000000">
+3.2 Binomial Swap Forest (San Ferm&#237;n)</A>
+</H2>
+
+<P>
+The analysis of San Ferm&#237;n assumes a complete binomial 
+swap forest.   Since it takes <IMG
+ WIDTH="38" HEIGHT="30" ALIGN="MIDDLE" BORDER="0"
+ SRC="img43.png"
+ ALT="$\frac{s}{b}+l$"> time to do a swap, the
+completion time is <!-- MATH
+ $\log_2(N) * (\frac{s}{b}+l)$
+ -->
+<IMG
+ WIDTH="120" HEIGHT="32" ALIGN="MIDDLE" BORDER="0"
+ SRC="img44.png"
+ ALT="$\log_2(N) * (\frac{s}{b}+l)$">.
+Figures&nbsp;<A HREF="#model-time-size">5a</A> and <A HREF="#model-time-nodes">6a</A> show that using a
+binomial swap forest is effective at rapidly aggregating data.   For example,
+using a binomial swap forest takes less than 1/3 the time of other techniques
+when more than 128 KB of data per node is aggregated.
+
+<P>
+After a node swaps with <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img27.png"
+ ALT="$n$"> other nodes 
+in a binomial swap forest its data will 
+appear in <IMG
+ WIDTH="20" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img6.png"
+ ALT="$2^n$"> binomial trees, so that <IMG
+ WIDTH="20" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img6.png"
+ ALT="$2^n$"> nodes must fail for the 
+original node's data to be lost.
+The probability of single node failing by time <IMG
+ WIDTH="10" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img45.png"
+ ALT="$t$"> is 
+<IMG
+ WIDTH="84" HEIGHT="35" ALIGN="MIDDLE" BORDER="0"
+ SRC="img46.png"
+ ALT="$1 - (1-c)^t$">, and the probability of <IMG
+ WIDTH="12" HEIGHT="31" ALIGN="MIDDLE" BORDER="0"
+ SRC="img47.png"
+ ALT="$g$"> nodes failing by
+time <IMG
+ WIDTH="10" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img45.png"
+ ALT="$t$">
+is <IMG
+ WIDTH="103" HEIGHT="35" ALIGN="MIDDLE" BORDER="0"
+ SRC="img48.png"
+ ALT="$(1-(1-c)^t)^g$">.  This leads to a completeness of <!-- MATH
+ $N - 
+\sum_{i=1}^{\log_2(N)} \frac{N}{2} * (1 - (1 - c)^{i * (\frac{s}{b} +
+l)})^{2^{i-1}}$
+ -->
+<IMG
+ WIDTH="289" HEIGHT="43" ALIGN="MIDDLE" BORDER="0"
+ SRC="img49.png"
+ ALT="$ N -
+\sum_{i=1}^{\log_2(N)} \frac{N}{2} * (1 - (1 - c)^{i * (\frac{s}{b} +
+l)})^{2^{i-1}}$">.   As Figures&nbsp;<A HREF="#model-complete-size">5b</A> and
+<A HREF="#model-complete-nodes">6b</A> show, a binomial swap forest has
+high completeness in the face of failures.   For example, 
+when aggregating more than 64KB of data, a binomial swap
+forest loses data from an order of magnitude fewer nodes than the
+other techniques.
+
+<P>
+Building a binomial swap forest involves each node swapping data with
+<IMG
+ WIDTH="58" HEIGHT="32" ALIGN="MIDDLE" BORDER="0"
+ SRC="img50.png"
+ ALT="$\log_2(N)$"> other nodes.   Assuming that failures do not impact overhead,
+the overhead is <IMG
+ WIDTH="88" HEIGHT="32" ALIGN="MIDDLE" BORDER="0"
+ SRC="img51.png"
+ ALT="$N * \log_2(N)$">.   As
+Figures&nbsp;<A HREF="#model-overhead-size">5c</A> and <A HREF="#model-overhead-nodes">6c</A> show, the
+overhead of a binomial swap forest is very high (Section&nbsp;<A HREF="#sec:description">4</A> 
+explains how San Ferm&#237;n reduces this overhead by pruning trees).   
+Using a binomial swap
+forest to aggregate 1MB of data requires about 20 times more overhead than
+balanced trees and about 5 times more than supernodes.  
+
+<P>
+Intuitively, a binomial swap forest works well for two reasons.   First, 
+bandwidth dominates when aggregating large amounts of data.
+Other techniques build 
+trees with higher fan-in so that nodes contend for bandwidth, while a binomial
+swap forest has no contention since swaps are done with only one node at a 
+time.  Second, data is replicated
+widely so that failures are less likely to reduce completeness.   Nodes
+swap repeatedly, so that an exponential number of nodes need to fail for the
+data to be lost.
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="model-time-size"></A><A NAME="model-complete-size"></A><A NAME="model-overhead-size"></A><A NAME="scalability-size"></A><A NAME="683"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 5:</STRONG>
+Scalability in the data size</CAPTION>
+<TR><TD><DIV ALIGN="CENTER"> <IMG WIDTH="300" SRC="ts.out.ps.gif">&nbsp;&nbsp;&nbsp;&nbsp; 
+<IMG WIDTH="300" SRC="cs.out.ps.gif">&nbsp;&nbsp;&nbsp;&nbsp; 
+<IMG WIDTH="300" SRC="os.out.ps.gif"></DIV></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="model-time-nodes"></A><A NAME="model-complete-nodes"></A><A NAME="model-overhead-nodes"></A><A NAME="scalability-nodes"></A><A NAME="695"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 6:</STRONG>
+Scalability in the number of nodes</CAPTION>
+<TR><TD><DIV ALIGN="CENTER">  <IMG WIDTH="300" SRC="tn.out.ps.gif">&nbsp;&nbsp;&nbsp;&nbsp; 
+  <IMG WIDTH="300" SRC="cn.out.ps.gif">&nbsp;&nbsp;&nbsp;&nbsp; 
+  <IMG WIDTH="300" SRC="on.out.ps.gif"></DIV></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+
+<H2><A NAME="SECTION00033000000000000000">
+3.3 Centralized (Direct Retrieval)</A>
+</H2>
+
+<P>
+In the centralized model, a central node contacts every node, retrieves
+their data directly, and computes the aggregated result.
+The central node can eliminate almost all latency costs by
+pipelining the retrievals, 
+resulting in a completion time of
+<!-- MATH
+ $l + \frac{s * N}{b}$
+ -->
+<IMG
+ WIDTH="56" HEIGHT="36" ALIGN="MIDDLE" BORDER="0"
+ SRC="img52.png"
+ ALT="$l + \frac{s * N}{b}$">.   This is much higher than the other techniques
+shown in Figure&nbsp;<A HREF="#model-time-size">5a</A> because the time is linear in the
+number of nodes and the other techniques are logarithmic.   As a result, 
+to aggregate 1MB of data using the centralized technique takes 26 days
+as compared to  about 2 minutes with a binomial swap forest.
+
+<P>
+The completeness is the number of nodes
+that did not fail prior to the central node retrieving their data.   
+The probability that a node is alive after <IMG
+ WIDTH="10" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img45.png"
+ ALT="$t$"> seconds
+is <IMG
+ WIDTH="56" HEIGHT="35" ALIGN="MIDDLE" BORDER="0"
+ SRC="img53.png"
+ ALT="$(1-c)^t$">, so the expected completeness is <!-- MATH
+ $\sum_{i=1}^{N} 
+(1 - c)^{\frac{i * s}{b} + l}$
+ -->
+<IMG
+ WIDTH="123" HEIGHT="41" ALIGN="MIDDLE" BORDER="0"
+ SRC="img54.png"
+ ALT="$\sum_{i=1}^{N}
+(1 - c)^{\frac{i * s}{b} + l}$">.
+As can be seen in Figures&nbsp;<A HREF="#model-complete-size">5b</A> and
+<A HREF="#model-complete-nodes">6b</A> the centralized model has very poor results, 
+despite assuming that the central node does not fail.
+The poor results are because many nodes fail before they are contacted
+by the central node.
+
+<P>
+The overhead is the number of nodes that were alive when contacted multiplied
+by the data size: <!-- MATH
+ $\sum_{i=1}^{N} 
+(1 - c)^{\frac{i * s}{b} + l} * N$
+ -->
+<IMG
+ WIDTH="152" HEIGHT="41" ALIGN="MIDDLE" BORDER="0"
+ SRC="img55.png"
+ ALT="$\sum_{i=1}^{N}
+(1 - c)^{\frac{i * s}{b} + l} * N$">.   A comparison is shown in
+Figures&nbsp;<A HREF="#model-overhead-size">5c</A> and <A HREF="#model-overhead-nodes">6c</A>.
+These results seem fantastic for large data sizes and numbers of nodes when 
+compared to other algorithms, however what is really happening is that
+many nodes fail before their data is retrieved, reducing overhead but
+also reducing completeness.   
+
+<P>
+
+<H2><A NAME="SECTION00034000000000000000">
+3.4 Balanced Trees (SDIMS)</A>
+</H2>
+
+<P>
+Aggregation is often performed using trees whose internal nodes have
+similar degree <IMG
+ WIDTH="12" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img42.png"
+ ALT="$d$"> and whose leaf nodes have similar depth.   
+An internal node waits for data from all of its children
+before computing the aggregated data and sending the aggregate result to its 
+parent. 
+In practice, one of the
+child nodes is also the parent node so only <IMG
+ WIDTH="40" HEIGHT="30" ALIGN="MIDDLE" BORDER="0"
+ SRC="img56.png"
+ ALT="$d-1$"> children send data
+to the parent.
+The model assumes that trees are balanced and complete with degree <IMG
+ WIDTH="12" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img42.png"
+ ALT="$d$">.   
+If the effects of failures on completion time are ignored, the completion
+time is <!-- MATH
+ $\log_d(N) * (\frac{(d-1) * s}{b}+l)$
+ -->
+<IMG
+ WIDTH="160" HEIGHT="40" ALIGN="MIDDLE" BORDER="0"
+ SRC="img57.png"
+ ALT="$\log_d(N) * (\frac{(d-1) * s}{b}+l)$">.   As
+Figure&nbsp;<A HREF="#model-time-size">5a</A> shows, this algorithm is quite fast when the 
+data size is small and hence latency dominates.  
+However, the performance quickly degrades when the
+data size increases.   Aggregating 1MB of data using a balanced tree
+is about 4 times slower than using a binomial swap forest.
+
+<P>
+A node that fails before sending to its parent will be missing from the result. 
+It is also possible that both the child and parent fail after the child has 
+sent the data, also causing the child to be missing.
+The completeness model captures these node failures.   
+However, the model does
+not consider a cascade effect.   This occurs when a parent has failed and 
+another node is recovering the data from the children 
+when a child fails.   The node that recovers and
+takes the role of the child would need to recover data from the child's 
+children.   This is failure handling of a child within failure handling of 
+the parent (a cascade effect) and is not captured in the model.
+In the balanced tree model, there are <!-- MATH
+ $\frac{N}{(d-1)*d^i}$
+ -->
+<IMG
+ WIDTH="59" HEIGHT="36" ALIGN="MIDDLE" BORDER="0"
+ SRC="img58.png"
+ ALT="$\frac{N}{(d-1)*d^i}$"> nodes at level <IMG
+ WIDTH="9" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img59.png"
+ ALT="$i$">.
+Since there is a <!-- MATH
+ $\sum_{j=1}^{d-1}(1-(1-c)^{j*\frac{s}{b} + l})$
+ -->
+<IMG
+ WIDTH="167" HEIGHT="41" ALIGN="MIDDLE" BORDER="0"
+ SRC="img60.png"
+ ALT="$\sum_{j=1}^{d-1}(1-(1-c)^{j*\frac{s}{b} + l})$"> probability of
+an internal node failure with <!-- MATH
+ $\sum_{k=1}^{i*(d-1)} 
+(1-(1-c)^{i*(\frac{(d-1)*s}{b}+l) + (k+j)*\frac{s}{b} + l})$
+ -->
+<IMG
+ WIDTH="303" HEIGHT="43" ALIGN="MIDDLE" BORDER="0"
+ SRC="img61.png"
+ ALT="$\sum_{k=1}^{i*(d-1)}
+(1-(1-c)^{i*(\frac{(d-1)*s}{b}+l) + (k+j)*\frac{s}{b} + l})$"> probability of
+a corresponding child failure, the balanced tree's completeness 
+is: <!-- MATH
+ $N - \sum_{i=0}^{\log_d(N)-1} \frac{N}{(d-1)*d^i}* 
+\sum_{j=1}^{d-1} (1-(1-c)^{j*\frac{s}{b} + l}) \mbox{} * 
+(1 + \sum_{k=1}^{i*(d-1)} (1-(1-c)^{i*(\frac{(d-1)*s}{b}+l) + 
+(k+j)*\frac{s}{b} + l}))$
+ -->
+<IMG
+ WIDTH="703" HEIGHT="43" ALIGN="MIDDLE" BORDER="0"
+ SRC="img62.png"
+ ALT="$N - \sum_{i=0}^{\log_d(N)-1} \frac{N}{(d-1)*d^i}*
+\sum_{j=1}^{d-1} (1-(1-c)^{j...
+...m_{k=1}^{i*(d-1)} (1-(1-c)^{i*(\frac{(d-1)*s}{b}+l) +
+(k+j)*\frac{s}{b} + l}))$">.   As Figure&nbsp;<A HREF="#model-complete-size">5b</A> 
+shows, the completeness is high when the aggregate data size is small.
+However, as the aggregate data size increases the completeness
+quickly falls off.   When the number of nodes is varied instead (as in
+Figure&nbsp;<A HREF="#model-complete-nodes">6b</A>), the completeness is essentially the same
+as having robust internal tree nodes that are provisioned against failure.
+For example, with 1 million nodes it is expected that only 1% of the
+nodes that are excluded from the result are due to internal node failures.  
+However, the high-degree nodes take a significant amount of time to receive the
+initial data from each node.   The time the lowest level of internal nodes
+take to receive the initial data from their leaf node presents a significant 
+time window for node failures.   As a result using a binomial swap forest 
+gives an order of magnitude improvement in completeness.
+
+<P>
+In the special case <IMG
+ WIDTH="41" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img63.png"
+ ALT="$d = 2$">, the balanced tree
+technique actually builds a binomial tree because internal nodes are counted 
+as children at the lower levels.   However, this is a single, static tree 
+instead of a binomial swap forest.  This binomial tree 
+still has roughly four times worse completeness than using a binomial swap 
+forest.   If the degree of the balanced tree were larger (such as 16 as is 
+used in practice), the balanced tree would have even worse completeness.
+
+<P>
+In the balanced tree model, data is only sent multiple times when failures 
+occur.   There is a base cost of <IMG
+ WIDTH="18" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img30.png"
+ ALT="$N$"> 
+with <!-- MATH
+ $\sum_{i=0}^{\log_d(N)-1} \frac{N}{(d-1)*d^i}$
+ -->
+<IMG
+ WIDTH="140" HEIGHT="43" ALIGN="MIDDLE" BORDER="0"
+ SRC="img64.png"
+ ALT="$\sum_{i=0}^{\log_d(N)-1} \frac{N}{(d-1)*d^i}$"> nodes per level and a 
+probability of failure of <!-- MATH
+ $1-(1-c)^{\frac{(d-1)*s}{b}+l}$
+ -->
+<IMG
+ WIDTH="136" HEIGHT="43" ALIGN="MIDDLE" BORDER="0"
+ SRC="img65.png"
+ ALT="$1-(1-c)^{\frac{(d-1)*s}{b}+l}$"> with a retransmission
+cost of approximately <IMG
+ WIDTH="125" HEIGHT="32" ALIGN="MIDDLE" BORDER="0"
+ SRC="img66.png"
+ ALT="$((i)*(d-1)-1)$">.   The retransmission cost involves all
+<IMG
+ WIDTH="40" HEIGHT="30" ALIGN="MIDDLE" BORDER="0"
+ SRC="img56.png"
+ ALT="$d-1$"> of the nodes at the prior <IMG
+ WIDTH="9" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img59.png"
+ ALT="$i$"> non-leaf levels retransmitting their 
+aggregate data to their new parent (except the failed node).
+The overhead is therefore:
+<!-- MATH
+ $s*(N + \sum_{i=0}^{\log_d(N)-1} 
+\frac{N}{(d-1)*d^i} * 1-(1-c)^{\frac{(d-1)*s}{b}+l} * (i*(d-1)-1)))$
+ -->
+<IMG
+ WIDTH="485" HEIGHT="43" ALIGN="MIDDLE" BORDER="0"
+ SRC="img67.png"
+ ALT="$s*(N + \sum_{i=0}^{\log_d(N)-1}
+\frac{N}{(d-1)*d^i} * 1-(1-c)^{\frac{(d-1)*s}{b}+l} * (i*(d-1)-1)))$"> which is 
+very respectable considering aggregate data is returned from most nodes.   As
+Figures&nbsp;<A HREF="#model-overhead-size">5c</A> and <A HREF="#model-overhead-nodes">6c</A> show,
+the overhead is the lowest of the techniques with acceptable completeness.
+For example, when aggregating 1MB of data the overhead of balanced is about 
+4 times better than supernode and about 20 times better than using a binomial
+swap forest.   
+
+<P>
+
+<H2><A NAME="SECTION00035000000000000000">
+3.5 Supernode (Seaweed)</A>
+</H2>
+
+<P>
+In this technique the nodes form a tree whose internal nodes
+replicate 
+data before sending it up toward the root of the tree.  Typically the tree 
+is balanced and has uniform degree <IMG
+ WIDTH="12" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img42.png"
+ ALT="$d$">.   To prevent the loss 
+of data when an internal node fails, there are <IMG
+ WIDTH="11" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img41.png"
+ ALT="$r$"> replicas of each internal 
+node.   
+When a node receives data from a child it replicates the data
+before replying to the child.
+Ideally an internal node can 
+replicate data from a child concurrently with receiving data from another 
+child.  
+A node typically batches data before sending it to 
+its parent to prevent sending small amounts of data
+through the tree.
+
+<P>
+The model allows internal nodes to replicate data while 
+receiving new data, and assumes internal nodes send data to 
+their parents as soon as they have received all data from their children.
+This means the model hides all but the 
+initial delay in receiving the first bit of data (<IMG
+ WIDTH="38" HEIGHT="30" ALIGN="MIDDLE" BORDER="0"
+ SRC="img43.png"
+ ALT="$\frac{s}{b}+l$">) in 
+the replication time (<!-- MATH
+ $\frac{r*d*s}{b} + 2 * l$
+ -->
+<IMG
+ WIDTH="87" HEIGHT="36" ALIGN="MIDDLE" BORDER="0"
+ SRC="img68.png"
+ ALT="$\frac{r*d*s}{b} + 2 * l$">) and leads to a completion
+time of <!-- MATH
+ $\log_d(N) * ( \frac{s + r * d * s}{b} + 3 *l)$
+ -->
+<IMG
+ WIDTH="185" HEIGHT="36" ALIGN="MIDDLE" BORDER="0"
+ SRC="img69.png"
+ ALT="$\log_d(N) * ( \frac{s + r * d * s}{b} + 3 *l)$">.   However, the 
+replication delay is significant
+as Figures&nbsp;<A HREF="#model-time-size">5a</A> and <A HREF="#model-time-nodes">6a</A>
+illustrate.   Aggregating 1MB of data from 16 nodes using supernodes takes 
+more than 8 minutes - about 16 times longer than it takes a 
+binomial swap forest.
+
+<P>
+To simplify  analysis the model assumes that there is enough replication
+to avoid losing all replicas of a supernode simultaneously.
+As a result, the only
+failures that affect completeness are leaf nodes that fail before sending  
+data to their parents.   This leads to a completeness of
+<!-- MATH
+ $\sum_{i=1}^{d} \frac{N}{d} * (1 - c)^{i * (\frac{s}{b}) + l}$
+ -->
+<IMG
+ WIDTH="166" HEIGHT="41" ALIGN="MIDDLE" BORDER="0"
+ SRC="img70.png"
+ ALT="$\sum_{i=1}^{d} \frac{N}{d} * (1 - c)^{i * (\frac{s}{b}) + l}$">.   As
+Figures&nbsp;<A HREF="#model-complete-size">5b</A> and <A HREF="#model-complete-nodes">6b</A> show, 
+this delay is enough to reduce the completeness below that of 
+the binomial swap forest (by more than an order of magnitude when aggregating
+1MB).   This is because in a binomial swap forest the
+data is replicated to exponentially many nodes, while the supernode technique
+has an initial significant window of vulnerability while the leaf nodes send
+their data to their parents.
+
+<P>
+The overhead is broken down into the cost of replicating data for internal
+nodes <!-- MATH
+ $s*\frac{(N-1)*r}{d-1}$
+ -->
+<IMG
+ WIDTH="80" HEIGHT="40" ALIGN="MIDDLE" BORDER="0"
+ SRC="img71.png"
+ ALT="$s*\frac{(N-1)*r}{d-1}$">, the cost of the leaf to internal node
+communication <!-- MATH
+ $s*( \sum_{i=1}^{d} \frac{r*N* (1-c)^{i *(\frac{s}{b} +
+l)}}{d})$
+ -->
+<IMG
+ WIDTH="187" HEIGHT="48" ALIGN="MIDDLE" BORDER="0"
+ SRC="img72.png"
+ ALT="$s*( \sum_{i=1}^{d} \frac{r*N* (1-c)^{i *(\frac{s}{b} +
+l)}}{d})$">, and the re-replication cost <!-- MATH
+ $s*( \sum_{j=1}^{\lfloor \log_d(N) 
+\rfloor - 1} \frac{N}{d^j} * (1-(1-c)^{j *(\frac{r*d*s + s}{b} + 3*l})$
+ -->
+<IMG
+ WIDTH="334" HEIGHT="43" ALIGN="MIDDLE" BORDER="0"
+ SRC="img73.png"
+ ALT="$s*( \sum_{j=1}^{\lfloor \log_d(N)
+\rfloor - 1} \frac{N}{d^j} * (1-(1-c)^{j *(\frac{r*d*s + s}{b} + 3*l})$">.
+As Figures&nbsp;<A HREF="#model-overhead-size">5c</A> and&nbsp;<A HREF="#model-overhead-nodes">6c</A> show,
+the overhead of the supernode technique is better than the binomial swap
+forest technique by about a factor of 4 but worse than the other techniques 
+due to the supernode replication.   
+
+<H1><A NAME="SECTION00040000000000000000"></A><A NAME="sec:description"></A><BR>
+4 San Ferm&#237;n Details
+</H1> 
+
+<P>
+This section describes the details of San Ferm&#237;n, including an overview of the
+Pastry peer-to-peer (p2p) message delivery subsystem
+used by the San Ferm&#237;n prototype, a description of how San Ferm&#237;n 
+nodes find other nodes with whom to swap, 
+how failures are handled, how timeouts are chosen, 
+and how trees are pruned to minimize overhead.
+
+<P>
+
+<H2><A NAME="SECTION00041000000000000000">
+4.1 Pastry</A>
+</H2> 
+Pastry&nbsp;[<A
+ HREF="paper.html#rowstron01pastry">26</A>]
+is a peer-to-peer system similar to Chord&nbsp;[<A
+ HREF="paper.html#stoicachord">28</A>] 
+and Tapestry&nbsp;[<A
+ HREF="paper.html#zhao03tapestry">35</A>].
+Each node has a unique 160-bit nodeId that is used
+to identify nodes and route messages.
+Given a message and a destination
+nodeId, Pastry routes the message to the node 
+whose nodeId is numerically closest to
+the destination.
+
+<P>
+Each Pastry node has two routing structures:
+a <I>routing
+table</I> and a <I>leaf set</I>.  The leaf set for a node is 
+a fixed number of nodes that have the
+numerically closest nodeIds to that node.   
+This assists nodes
+in the last step of routing messages 
+and in rebuilding 
+routing tables when nodes fail.
+
+<P>
+The routing table consists of node characteristics (such as IP address, latency
+information, and Pastry ID) organized in rows by
+the length of the common prefix.   
+When routing a message each node 
+forwards it to the node in the routing table with the longest
+prefix in common with the destination nodeId.
+
+<P>
+Pastry uses nodes with nearby
+network proximity when constructing routing tables.
+As a result, the average latency of Pastry messages 
+is less than twice the IP delay&nbsp;[<A
+ HREF="paper.html#castro02exploiting">5</A>].   
+For a complete description of Pastry see the paper by Rowstron and 
+Druschel&nbsp;[<A
+ HREF="paper.html#rowstron01pastry">26</A>].
+
+<P>
+
+<H2><A NAME="SECTION00042000000000000000">
+4.2 Overview</A>
+</H2>
+
+<P>
+San Ferm&#237;n is part of a larger system for data aggregation.   Aggregation queries
+are disseminated to nodes using SCRIBE&nbsp;[<A
+ HREF="paper.html#castro02scribe">6</A>] as the 
+dissemination mechanism.   
+These queries may either contain new code or references to existing code
+that performs two functions: extraction and aggregation.   
+The extraction function 
+extracts the desired data from an individual node and makes it available
+for aggregation. 
+For example, if 
+the query is over flow data, the extraction 
+function would open the flow data logs and 
+extract the fields of interest.   
+
+<P>
+The aggregation function
+aggregates data from multiple nodes.   This may be a simple operation like 
+summing data items in different locations or something more complex like
+performing object recognition by combining data from multiple cameras.   
+
+<P>
+When a node receives an aggregation request, the node disseminates the request 
+and then runs the extraction function 
+to obtain the data that should be aggregated.   The
+San Ferm&#237;n algorithm is used to decide how the nodes should collaborate to aggregate
+data.  San Ferm&#237;n 
+uses the aggregation function provided in the aggregation request
+to aggregate data from multiple sources.
+Once a node has the result of the request it sends the data back to the
+requester.   The requester then sends a <I>stop message</I> to all nodes (using 
+SCRIBE) and they stop processing the request.
+
+<P>
+
+<H2><A NAME="SECTION00043000000000000000">
+4.3 San Ferm&#237;n </A>
+</H2>
+
+<P>
+There are several problems that must be solved for San Ferm&#237;n to work
+correctly and efficiently. First, a node must find other nodes with 
+whom to swap
+aggregate data without complete information
+about the other nodes in the system. 
+Second, a node must detect and handle the failures of other nodes. 
+Third, a node must detect when the tree it is constructing is unlikely
+to be the first tree constructed and abort to reduce
+overhead. Each of these problems is addressed in the following
+subsections.
+
+<P>
+
+<H3><A NAME="SECTION00043100000000000000">
+4.3.1 Finding Partners</A>
+</H3>
+
+<P>
+To find nodes with whom to partner, each node first finds the
+longest <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> its Pastry nodeId has among all nodes.   This is
+achieved by examining  the nodeIds of the nodes in its leaf set. 
+The node first swaps with a node that has the
+longest <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">, then the second-longest <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">, and so on, until
+the node
+swaps with a
+node that differs in the first bit.   At this point the node has built a
+binomial tree with aggregate data from all nodes 
+and has computed the result.
+
+<P>
+San Ferm&#237;n 
+builds the binomial swap 
+forest using a per-node <I>prefix table</I>
+that is constructed from node information in Pastry's routing 
+table and leaf set.
+The <IMG
+ WIDTH="9" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img59.png"
+ ALT="$i$">th row in the prefix table contains the nodes in <!-- MATH
+ $\ensuremath{\hat{L}_{i}}$
+ -->
+<IMG
+ WIDTH="20" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img74.png"
+ ALT="\ensuremath{\hat{L}_{i}}">
+from the routing table and leaf set. 
+Each node initially swaps with a node in the highest non-empty
+row in its prefix table, then swaps with nodes in successive rows
+until culminating with row 0.
+In this way San Ferm&#237;n approximates binomial trees.  The
+nodeIds are randomly distributed, so <!-- MATH
+ $\ensuremath{\hat{L}_{p}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img75.png"
+ ALT="\ensuremath{\hat{L}_{p}}">  should 
+contain about twice as many nodes as <!-- MATH
+ $\ensuremath{\hat{L}_{p+1}}$
+ -->
+<IMG
+ WIDTH="38" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img76.png"
+ ALT="\ensuremath{\hat{L}_{p+1}}">.  Since
+nodes swap aggregate data starting at their longest <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">, with each
+swap the number of nodes included in the aggregate data  
+doubles.   Swapping therefore doubles the number of nodes in the 
+tree with each swap and thus approximates a binomial tree.  
+
+<P>
+Swapping is a powerful mechanism for aggregating data, but there are several
+issues that must be addressed.   Pastry only provides
+each node with the nodeIds for a few nodes with each <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">, so 
+how do nodes find partners with whom to swap? 
+Also, how does a node know that another node is ready to
+swap with it?   San Ferm&#237;n solves these problems using <I>invitations</I>, which
+are messages delivered via Pastry that indicate 
+that the sender is interested in swapping data with the recipient.
+A node only tries to swap with another
+node if it has previously received an invitation from that node.
+
+<P>
+In addition to sending invitations to the nodes known by Pastry, invitations 
+are also sent to random nodeIds with the correct <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">.   Pastry routes these
+invitations to the node with the nearest nodeId.
+This is important because Pastry will generally  only know a subset 
+of the nodes with a given <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">.   To provide high completeness, a node in San Ferm&#237;n 
+must find a live node with whom to swap with each <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">.
+
+<P>
+An empty row in the prefix table is handled differently 
+depending on whether or not the associated <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}"> 
+falls within the node's leaf set.
+If
+<!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">  
+is within the leaf set then <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">  must be empty because the
+Pastry leaf sets are accurate.
+The node skips the empty row.
+Otherwise, if <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">  is not within the leaf set, the node 
+sends invitations to random nodeIds in <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">. If no nodes exist within the 
+<!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">  the invitations will eventually time-out and the node will skip 
+<!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}">.  
+This rarely happens, as the expected number of nodes in <!-- MATH
+ $\ensuremath{\hat{L}_{x}}$
+ -->
+<IMG
+ WIDTH="23" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img77.png"
+ ALT="\ensuremath{\hat{L}_{x}}"> 
+increases exponentially as <IMG
+ WIDTH="13" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img13.png"
+ ALT="$x$"> decreases.
+As an alternative to letting the invitations time-out, the 
+the nodes that receive the randomly-sent messages could respond
+that <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}"> is empty. An empty <!-- MATH
+ $\ensuremath{\hat{L}_{k}}$
+ -->
+<IMG
+ WIDTH="22" HEIGHT="38" ALIGN="MIDDLE" BORDER="0"
+ SRC="img15.png"
+ ALT="\ensuremath{\hat{L}_{k}}"> outside
+of the leaf set was never observed during testing so this modification
+is not necessary.
+
+<P>
+
+<H3><A NAME="SECTION00043200000000000000">
+4.3.2 Handling Failures</A>
+</H3>
+
+<P>
+Pastry provides a  failure notification
+mechanism that allows nodes to detect other node failures, but it has two
+problems that make it unsuitable for use in San Ferm&#237;n. First, 
+the polling rate for Pastry is 30 seconds, which 
+can cause 
+the failure of a single node to dominate the aggregation time. 
+Second, some nodes
+that fail at the application level are still alive from Pastry's perspective.
+A node may perform Pastry functions correctly, but have
+some other problem that prevents it from aggregating data.
+
+<P>
+For these reasons San Ferm&#237;n uses invitations to handle node failures, rather than
+relying exclusively on Pastry's failure notification mechanism. 
+A node responds to an invitation to swap on a shorter <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> than its current
+<!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> with a ``maybe later'' reply. 
+This tells the sender that there is a live node
+with this <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> that may later swap with it.   If a ``maybe later''
+message is not received, the node sends invitations to random nodeIds
+with 
+that <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> to try and locate a live node.   If this
+fails, the node will eventually conclude the <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> has no live nodes
+and move on to the next shorter <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">.
+
+<P>
+Since timeouts are used to bypass non-responsive nodes, 
+selecting the proper timeout period for San Ferm&#237;n is important.
+Nodes may be overwhelmed if the timeout is too short and invitations are
+sent too frequently. 
+Also short timeouts may cause nodes to be skipped during  
+momentary network outages.
+If the timeout is too long then 
+San Ferm&#237;n will recover from failures slowly, increasing completion time.
+
+<P>
+Rather than having a fixed timeout length for all values of <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">, San Ferm&#237;n scales 
+the
+timeout based on the estimated number of nodes 
+with the value of <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">.   <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> values with more nodes have longer timeouts 
+because it is less likely that all the nodes will fail. Conversely,
+<!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> values with few nodes have shorter timeouts because it is more likely that
+all nodes will fail. In this case the node should 
+quickly move on to the next <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> if it cannot contact a live node
+in the current <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}">. A San Ferm&#237;n node estimates the number of nodes 
+in <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> by estimating the density of nodes in the entire Pastry 
+ring, which in turn is estimated from the density of nodes in its leaf set.
+
+<P>
+San Ferm&#237;n sets timeouts to be a small constant <IMG
+ WIDTH="10" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img45.png"
+ ALT="$t$"> multiplied by the estimated 
+number of nodes at <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> for the given value. 
+This means that no matter how many nodes 
+are waiting on a group of nodes, the nodes in this group will receive fewer 
+than <IMG
+ WIDTH="33" HEIGHT="17" ALIGN="BOTTOM" BORDER="0"
+ SRC="img78.png"
+ ALT="$2*t$"> invitations per second, on average.   This timeout rate also keeps 
+the overhead from invitations low.
+
+<P>
+
+<H3><A NAME="SECTION00043300000000000000">
+4.3.3 Pruning Trees</A>
+</H3>
+
+<P>
+Each San Ferm&#237;n node builds its own
+tree to improve performance and tolerate failures, but only
+one tree will win
+the race to compute the final result.
+If San Ferm&#237;n knew the winner in advance it could build only the
+winning tree and avoid the overhead of building the losing trees. 
+Instead, San Ferm&#237;n builds all trees and prunes those unlikely to win. 
+San Ferm&#237;n prunes a tree whenever its root node cannot find
+another node with whom to swap but there exists a live node with that <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> 
+value.
+This is accomplished by the use of ``no'' responses to invitations.
+
+<P>
+A node sends a ``no'' response to an invitation when its current <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> is 
+shorter
+than the <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> contained in the invitation. This means the node receiving 
+the invitation has already aggregated the data in the <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> and has no 
+need to swap with the node that sent the invitation. 
+Whenever a node receives a ``no'' response it does not send future invitations
+to the node that sent the response.   Unlike a ``maybe later'' 
+response, ``no'' responses do not reset the timeout.   If a node that has 
+received a ``no'' response and it cannot find a partner for this value of <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> 
+before the timeout expires, the node simply aborts its aggregation.
+
+<P>
+Note that a node will only receive a ``no'' response when two other nodes have 
+its data in their aggregate data.   This is because the node that sends 
+a ``no'' response must have already aggregated data for that <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> 
+(and therefore must already have the inviting node's data).   Since the node that 
+sent the ``no'' response
+has aggregated data for the <!-- MATH
+ $\ensuremath{\hat{L}}$
+ -->
+<IMG
+ WIDTH="15" HEIGHT="18" ALIGN="BOTTOM" BORDER="0"
+ SRC="img19.png"
+ ALT="\ensuremath{\hat{L}}"> via a swap then another node must also
+have the inviting node's data.
+
+<P>
+
+<H3><A NAME="SECTION00043400000000000000">
+4.3.4 San Ferm&#237;n Pseudocode</A>
+</H3>
+
+<P>
+This section presents pseudocode for 
+the San Ferm&#237;n algorithm, omitting details of error and timeout handling. 
+
+<P>
+<PRE>
+When a node receives a message:
+  If message is an invitation:
+    If current ^L shorter than ^L in invitation 
+      reply with no
+    else reply with maybe_later and
+      remember node that sent invitation  
+  If message is a no, remember that one was received
+  If message is a maybe_later then reset time-out
+  If message is a stop then stop aggregation
+
+# Called to begin aggregation
+Function aggregate_data(data, requester):
+  Initialize the prefix_table from Pastry tables
+  for ^L in prefix_table from long to short:
+    Call aggregate_^L to swap data with a node
+    If swap successful
+      compute aggregation of existing and received data
+  Send aggregate data (the result) to the requester
+
+# A helper function to do aggregation for a value of ^L
+Function aggregate_^L(data, known_nodes):
+  Try to swap data with nodes with this ^L from whom
+       an invitation was received
+  If successful then return the aggregate data
+  Send invitations to nodes in prefix table with this ^L
+  While waiting for a time-out:
+    If a node connects, swap with it and return the data
+    Try to swap with nodes from whom we got invitations
+    If success then return the aggregate data
+
+  # Time-out
+  if we got a no message, then stop (do not return)
+  otherwise return no aggregate data
+</PRE>
+
+<H1><A NAME="SECTION00050000000000000000"></A><A NAME="sec-results"></A><BR>
+5 Evaluation
+</H1>
+This section answers several questions about San Ferm&#237;n:
+
+<P>
+
+<UL>
+<LI>How does San Ferm&#237;n compare to other existing solutions?
+
+<P>
+</LI>
+<LI>How well does San Ferm&#237;n scale with the number of nodes and the 
+data size?
+
+<P>
+</LI>
+<LI>How well does San Ferm&#237;n tolerate failures?
+
+<P>
+</LI>
+<LI>What is the overhead of San Ferm&#237;n?
+
+<P>
+</LI>
+<LI>How effective is San Ferm&#237;n at utilizing high-capacity nodes?
+
+<P>
+</LI>
+</UL>
+
+<P>
+
+<H2><A NAME="SECTION00051000000000000000">
+5.1 Comparison</A>
+</H2>
+
+<P>
+We developed a Java-based San Ferm&#237;n prototype 
+that runs on the Java 
+FreePastry implementation on PlanetLab&nbsp;[<A
+ HREF="paper.html#peterson02blueprint">23</A>].
+The SDIMS prototype (which also runs on FreePastry) was compared against
+San Ferm&#237;n in several experiments using 
+randomly-selected live nodes with transitive connectivity and
+clock skew of less than 1 second.
+All experiments for a particular number of nodes used the same set of nodes. 
+
+<P>
+The comparison with SDIMS  
+demonstrates that existing techniques are inadequate for
+aggregating large amounts of data. 
+SDIMS was designed for streaming small amounts of data whereas
+San Ferm&#237;n is designed for one-shot queries of large amounts of data.  
+Ideally, large SDIMS data would be treated as separate attributes and
+aggregated up separate trees.   However, since this may include only part of
+a node's data, this may skew the distribution of results returned.   Therefore
+all data is aggregated as a single attribute.
+
+<P>
+One complication with comparing the two is zombie nodes in Pastry.  San Ferm&#237;n uses
+timeouts to identify quickly nodes that are unresponsive.   SDIMS however, 
+relies on the underlying p2p network to identify unresponsive nodes,
+leaving it vulnerable to zombie nodes. After 
+consulting with the SDIMS authors, we learned that they avoid 
+this issue on PlanetLab by building more than one tree (typically four) and 
+using
+the aggregate data from the first tree to respond.   
+In the experiments we measured SDIMS 
+using both one tree (SDIMS-1) and four trees (SDIMS-4).
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="fig-expt-complete-size"></A><A NAME="fig-expt-complete-nodes"></A><A NAME="fig-expt-wttime-size"></A><A NAME="comparison"></A><A NAME="1338"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 7:</STRONG>
+Comparison of San Ferm&#237;n and SDIMS on PlanetLab. SDIMS-1 is SDIMS using
+  a single tree; SDIMS-4 is SDIMS using four trees.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER">  <IMG WIDTH="300" SRC="std1.complete.size.ps.gif">&nbsp;&nbsp;&nbsp;&nbsp; 
+  <IMG WIDTH="300" SRC="std1.complete.nodes.ps.gif">&nbsp;&nbsp;&nbsp;&nbsp; 
+  <IMG WIDTH="300" SRC="std1.wt.size.ps.gif"></DIV></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+The experiments compare the time, overhead and completeness of 
+SDIMS and San Ferm&#237;n.  A small amount of accounting information was included
+in the aggregate data for determining which nodes' data
+were included in the result.   
+Unless specified otherwise, each experiment used 100 nodes and aggregated 1MB from each
+node, each data point is the average of 10 runs, and the error bars represent 1
+standard deviation.  
+All 
+tests were limited to 5 minutes.   In SDIMS the aggregate data 
+trickles up to the root over time, so the  SDIMS result was considered 
+complete when either the aggregate data from all nodes reached the root or
+the aggregate data from at least half the nodes reached the root and no new
+data were received in 20 seconds. 
+
+<P>
+Different aggregation functions such as summing counters, 
+comparison for equals, 
+maximum, and string parsing were experimented with.   The choice of
+aggregation function did not have any noticeable effect on the experiments.   
+
+<P>
+
+<H3><A NAME="SECTION00051100000000000000">
+5.1.1 Completeness</A>
+</H3>
+
+<P>
+The first set of PlanetLab experiments 
+measures completeness  
+as the aggregated data size increases (Figure&nbsp;<A HREF="#fig-expt-complete-size">7a</A>). 
+The number of nodes not included in the aggregate data is 
+small for each algorithm until the data size exceeds 256KB.   At 
+that point SDIMS performs poorly because high-degree internal nodes are 
+overwhelmed (shown in more detail in Section&nbsp;<A HREF="#sec-overhead">5.4</A>).   
+San Ferm&#237;n continues to include the aggregate data from most nodes.   
+
+<P>
+The next set of experiments measures how
+the number of nodes affects completeness
+(Figure&nbsp;<A HREF="#fig-expt-complete-nodes">7b</A>).  
+When there are few nodes SDIMS-4
+and San Ferm&#237;n algorithms do quite well.   Once there are more than
+30 nodes the SDIMS trees perform poorly due to high-degree
+internal
+nodes being overwhelmed with traffic.
+
+<P>
+
+<H3><A NAME="SECTION00051200000000000000">
+5.1.2 Completion Time</A>
+</H3>
+
+<P>
+Figure&nbsp;<A HREF="#fig-expt-wttime-size">7c</A> shows per-node completion time, 
+which is the completion
+time of the entire aggregation divided by the number of nodes whose data is
+included in the result. This metric allows for meaningful 
+comparisons between San Ferm&#237;n and SDIMS because they may
+produce results with different
+completeness. 
+Data sizes larger than 256KB 
+significantly increases the per-node completion time of
+SDIMS, while San Ferm&#237;n increases only slightly. 
+Although not shown, for a given data size the number of nodes has little
+effect on the per-node
+completion time.
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="fig-expt-complete-time"></A><A NAME="1350"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 8:</STRONG>
+Completeness and Completion time of San Ferm&#237;n and SDIMS on PlanetLab. Each
+point represents a single run. Points near
+the origin are better because they have lower completion time and higher completeness. </CAPTION>
+<TR><TD><DIV ALIGN="CENTER">
+<IMG WIDTH="400" SRC="scatter.ps.gif"></DIV>
+
+<P></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+Figure&nbsp;<A HREF="#fig-expt-complete-time">8</A> 
+illustrates the performance of individual aggregations in terms of both completion time and
+completeness. 
+Points near the origin
+have low completion time and high completeness, and are thus better than
+points farther away.
+San Ferm&#237;n's points are clustered near the origin, indicating that it consistently provides
+high completeness and low completion time 
+even in a dynamic environment like PlanetLab.  SDIMS's performance is highly 
+variable -- SDIMS-1 occasionally has very high
+completeness and low completion time, but more often performs poorly with
+more than half the aggregations missing at least 35 nodes from the result.
+SDIMS-4 performs even worse with all but 10 aggregations missing at 
+least 80 nodes.
+
+<P>
+
+<H2><A NAME="SECTION00052000000000000000">
+5.2 Scalability</A>
+</H2>
+
+<P>
+We used a simulator to measure the scalability of San Ferm&#237;n beyond that
+possible on PlanetLab.
+The simulator is event-driven and based on measurements of real network topologies.
+Several simplifications were made to improve scalability and
+reduce the running time: 
+global knowledge is used to construct the 
+Pastry routing tables; the connection teardown states of TCP are not modeled (as San Ferm&#237;n does not wait 
+for TCP to complete the connection closure);
+and  lossy network 
+links are not modeled.  
+
+<P>
+The simulations used network topologies from the University of Arizona's 
+Department of Computer Science (CS)
+and PlanetLab.
+The CS topology 
+consists of a central switch connected to 
+142 systems with 1 Gbps links,    
+205 systems with 100 Mbps links, 
+and 
+6 legacy systems with 10 Mbps links.
+Simulations using fewer nodes were constructed by randomly 
+choosing nodes 
+from the entire set.
+
+<P>
+The PlanetLab topology was derived from data provided by the <IMG
+ WIDTH="22" HEIGHT="16" ALIGN="BOTTOM" BORDER="0"
+ SRC="img79.png"
+ ALT="$S^3$">
+project&nbsp;[<A
+ HREF="paper.html#S3">32</A>].   The data provides pairwise latency and bandwidth 
+measurements for all nodes on PlanetLab.  
+Intra-site topologies were assumed to consist of a single switch connected
+to all nodes. The latency of an intra-site link was set to 
+1/2 of the minimum latency seen
+by the node on that link, and the bandwidth to the maximum bandwidth
+seen by the node. Inter-site latencies were set to the minimum latency between the
+two sites as reported by <IMG
+ WIDTH="22" HEIGHT="16" ALIGN="BOTTOM" BORDER="0"
+ SRC="img79.png"
+ ALT="$S^3$"> minus the intra-site latencies of the 
+nodes. The inter-site bandwidths were set to the maximum bandwidths between
+the two sites.   
+
+<P>
+In both topologies the Pastry nodeIds were randomly assigned, and
+a different random seed was used for each simulation. As in the PlanetLab experiments,
+unless specified otherwise, each experiment used 100 nodes and aggregated 1MB of data from each node,
+each data point is the average of 10 runs, and the error bars represent 1 standard deviation.
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="fig-CStimenodes"></A><A NAME="1358"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 9:</STRONG>
+Completion Time vs. Nodes, CS Topology.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER">
+<IMG WIDTH="400" SRC="std1.CS.time.nodes.ps.gif"></DIV>
+
+<P></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="fig-CStimesize"></A><A NAME="1363"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 10:</STRONG>
+Completion Time vs. Data Size, CS Topology. Each experiment
+used all 353 nodes.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER">
+<IMG WIDTH="400" SRC="std1.CS.time.size.ps.gif"></DIV>
+
+<P>
+
+<P></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="fig-PLtimefail"></A><A NAME="1368"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 11:</STRONG>
+Completion Time vs. Failures, PlanetLab Topology. Each curve represents a different Pastry
+convergence time, from 0 seconds to infinity.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER">
+<IMG WIDTH="400" SRC="avg.time.PL.out.ps.gif"></DIV>
+
+<P></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="fig-bothcompletefail"></A><A NAME="1373"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 12:</STRONG>
+Completeness vs. Failures.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER">
+<IMG WIDTH="400" SRC="avg.avg.complete.ps.gif"></DIV>
+
+<P></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+The first experiment varied the number of nodes in the 
+system to demonstrate the scalability of San Ferm&#237;n; the results of the CS
+topology are shown in Figure&nbsp;<A HREF="#fig-CStimenodes">9</A>.
+The completion time 
+increases slightly as the number of nodes increases; when the number
+of nodes increases
+from 32 nodes to 1024 nodes the completion time only increases by
+about a factor of four. 
+A 1024 node aggregation of 1MB
+completed in under 500ms.
+The PlanetLab topology (not shown) has similar behavior -- the  
+completion time also increases by approximately a factor of 
+four as the number of
+nodes increases from 32 to 1024.  
+
+<P>
+Figure <A HREF="#fig-CStimesize">10</A> shows the result of varying the data size  
+while using all 353 nodes in the CS topology.   
+The 
+completion time is dominated by the p2p and message header overheads for data 
+sizes under 128KB.   When aggregating more than 128KB the completion time 
+increases significantly.   The PlanetLab topology (not
+shown) has a similar pattern in which
+all of the data sizes under 128KB take about
+4 seconds and thereafter the mean time increases linearly with the data size.   
+
+<P>
+In all experiments the result included data from all nodes, therefore
+completeness results are not presented.
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="fig-sim-overhead-nodes"></A><A NAME="fig-sim-overhead-size"></A><A NAME="fig-expt-overhead-size"></A><A NAME="overhead"></A><A NAME="1387"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 13:</STRONG>
+San Ferm&#237;n Overhead. Overhead is segregated into p2p and 
+      TCP traffic for (a) and (b).</CAPTION>
+<TR><TD><DIV ALIGN="CENTER"><IMG WIDTH="300" SRC="std1.overhead.nodes.ps.gif">&nbsp;&nbsp;&nbsp;&nbsp; 
+<IMG WIDTH="300" SRC="std1.overhead.size.ps.gif">&nbsp;&nbsp;&nbsp;&nbsp; 
+  <IMG WIDTH="300" SRC="estd1.overhead.size.ps.gif">
+</DIV></TD></TR>
+</TABLE>
+</DIV>
+
+<H2><A NAME="SECTION00053000000000000000">
+5.3 Failure Handling</A>
+</H2>
+
+<P>
+The next set of simulations measured the 
+effectiveness of San Ferm&#237;n at tolerating node failures.
+Failure traces were synthetically generated by randomly 
+selecting nodes to fail during the aggregation.  The times of the failures were chosen randomly from 
+the start time of the aggregation to the original completion time.   The 
+p2p time to notice failures is varied to 
+demonstrate the effect on San Ferm&#237;n.  
+
+<P>
+The timeout mechanism in San Ferm&#237;n allows it to detect failures before the 
+underlying p2p does.  As a result,
+the average completion time is less than the Pastry recovery 
+time (Figure&nbsp;<A HREF="#fig-PLtimefail">11</A>).
+On the PlanetLab topology, when the Pastry recovery time is less than
+5 seconds, the cost of failures is negligible because other nodes use the time
+to aggregate the remaining data (leaving only failed subtrees to 
+complete).  When the recovery time is more than 5 seconds then some nodes
+end up timing-out a failed subtree before continuing.   The CS department 
+topology (not depicted) typically completes in less than 500ms so 
+all non-zero Pastry recovery times increase the completion time.   However, the 
+average completion time is less than the Pastry recovery time for all recovery
+times greater than 1 second.
+
+<P>
+Figure&nbsp;<A HREF="#fig-bothcompletefail">12</A> shows how failures affect completeness.
+Since failures occurred over the original
+aggregation time, altering the Pastry convergence time has little effect
+on the completeness (and so the average of all runs is shown).  The number 
+of failures has different effects on the PlanetLab and CS topologies.
+There is greater variability of link bandwidths in the PlanetLab
+topology, which causes swaps to happen more slowly in some subtrees.
+Failures in those trees are more likely to decrease completeness than
+in the CS topology, which has more uniform link bandwidths and the
+data swaps happen more quickly. 
+In both topologies the completeness is better than the number of
+nodes that failed -- in most cases a node fails after enough
+swaps have occurred to ensure its data is included in
+the result.
+
+<P>
+
+<H2><A NAME="SECTION00054000000000000000"></A>
+<A NAME="sec-overhead"></A><BR>
+5.4 Overhead
+</H2>
+
+<P>
+In this section two aspects of overhead are examined: the cost of invitations
+and the overhead characteristics as measured 
+on PlanetLab.   The two characteristics of interest are the
+total traffic during aggregation and the peak traffic observed by a node.
+
+<P>
+
+<H3><A NAME="SECTION00054100000000000000">
+5.4.1 Overhead Composition</A>
+</H3>
+
+<P>
+We ran simulations with varying
+numbers of nodes on the CS and PlanetLab network topologies
+to evaluate the composition of network traffic from San Ferm&#237;n 
+(Figure&nbsp;<A HREF="#fig-sim-overhead-nodes">13a</A>). 
+The traffic is segregated by type (p2p or TCP).   
+The p2p traffic is essentially the traffic from invitations and responses 
+while the TCP traffic is from nodes swapping aggregate data.
+The  traffic per node does not 
+substantially increase as the number of nodes increases, meaning that 
+the total traffic is roughly linear in the number of nodes.
+
+<P>
+San Ferm&#237;n on the PlanetLab topology has
+higher p2p and lower TCP traffic than on the CS topology.   
+This is because PlanetLab's latency is higher and more variable, causing
+the overall aggregation process to take much longer 
+(which naturally increases the number of p2p messages sent).   The PlanetLab 
+bandwidth 
+is also highly variable (especially intra-site links
+versus inter-site links).   This causes high variability in partnering time, 
+so that  slow partnerings that might otherwise occur
+do not because faster nodes have already computed the result.
+
+<P>
+As Figure&nbsp;<A HREF="#fig-sim-overhead-nodes">13a</A> demonstrates, the p2p traffic is 
+insignificant when 1MB of data is aggregated.   
+Figure&nbsp;<A HREF="#fig-sim-overhead-size">13b</A> shows how the composition of p2p and
+TCP traffic varies as the data size is varied.   This is important for two
+reasons.   First, it shows that the p2p traffic does not contribute significantly
+to the total overhead.
+Second, it shows how the total overhead varies with the data size.  
+Doubling the data size caused the total overhead to roughly double. 
+
+<P>
+Another notable result is that 
+that the standard deviations were quite small, less than 4% in all cases. 
+This makes it
+difficult to discern the error bars in the figures.   
+
+<P>
+
+<H3><A NAME="SECTION00054200000000000000">
+5.4.2 Total Traffic</A>
+</H3>
+
+<P>
+The total network traffic of San Ferm&#237;n was also measured experimentally
+on PlanetLab (Figure&nbsp;<A HREF="#fig-expt-overhead-size">13c</A>).
+The results from SDIMS are presented for comparison. 
+For less than
+256KB, SDIMS-1 incurs the least overhead, followed
+by San Ferm&#237;n and then SDIMS-4.   After 256KB the overhead for
+SDIMS actually decreases because the completeness decreases.
+Nodes are overwhelmed by traffic and fail.
+A single internal node failure causes the loss of all data for it
+and its children until either the internal node recovers or the underlying
+p2p network converges.   
+
+<P>
+
+<H3><A NAME="SECTION00054300000000000000">
+5.4.3 Peak Node Traffic</A>
+</H3>
+
+<P>
+The peak traffic experienced by a node is important because 
+it can overload a node (Figure&nbsp;<A HREF="#fig-expt-hist-max">14</A>).
+To evaluate peak node traffic, an experiment was run on PlanetLab with 30
+nodes aggregating 1 MB of data (30 nodes being
+the most nodes for which SDIMS had high
+completeness).
+
+<P>
+SDIMS internal nodes may receive 
+data from many of their children simultaneously;
+the large initial peak of SDIMS traffic causes internal nodes that are not
+well-provisioned to either become zombies or fail.   On the other hand, 
+San Ferm&#237;n nodes only receive data from one partner at a time, 
+reducing the maximum peak traffic.   As a result, San Ferm&#237;n has a maximum peak 
+node traffic that is less than 2/3 that of SDIMS.   
+
+<P>
+
+<H2><A NAME="SECTION00055000000000000000"></A>
+<A NAME="sec-capacityprogress"></A><BR>
+5.5 Capacity
+</H2>
+
+<P>
+An important aspect of San Ferm&#237;n is that each node creates its own binomial 
+aggregation tree. By racing to compute the aggregate data, high-capacity nodes
+naturally fill the internal nodes of the binomial trees, while low-capacity
+nodes fill the leaves and ultimately prune their own aggregation trees. 
+
+<P>
+The final experiment measures how effective San Ferm&#237;n is at pruning low-capacity 
+nodes.  1MB of data was aggregated from 100 PlanetLab nodes 10 times.   The
+state of each node was recorded when the aggregation completed.
+Table&nbsp;<A HREF="#table-PLcapprog">2</A>
+shows the results, including the  number of  swaps remaining for each node
+to complete its aggregation and the average peak bandwidth
+of nodes with the same number of swaps remaining.
+Nodes with the higher capacity had fewer swaps remaining, 
+whereas the nodes with lower capacity pruned their trees.
+The nodes in the middle tended to prune their trees but some were still 
+working; the average peak bandwidth of these nodes was 
+2.1Mbps, whereas the average peak bandwidth of the nodes still working was 
+3.2Mbps.  This means that nodes that are pruned have about 1/3 less observed 
+capacity than those nodes that are still aggregating data.  This illustrates
+that San Ferm&#237;n is effective at having high-capacity nodes perform
+the aggregation and having low-capacity nodes prune their trees.
+
+<P>
+
+<DIV ALIGN="CENTER"><A NAME="fig-expt-hist-max"></A><A NAME="1408"></A>
+<TABLE>
+<CAPTION ALIGN="BOTTOM"><STRONG>Figure 14:</STRONG>
+Peak Node Traffic. Each data point represents the peak
+traffic experienced by a node during that second of the aggregation.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER"><IMG WIDTH="400" SRC="hist.max.ps.gif"></DIV>
+
+<P></TD></TR>
+</TABLE>
+</DIV>
+
+<P>
+<BR><P></P>
+<DIV ALIGN="CENTER"><A NAME="1440"></A>
+<TABLE>
+<CAPTION><STRONG>Table 2:</STRONG>
+Effectiveness of San Ferm&#237;n at using high-capacity nodes. 
+    The <I>number</I> column is the number of nodes with the given number
+    of swap remaining when the aggregation completed; the <I>Mbps</I> 
+    column is the average peak bandwidth of those nodes.</CAPTION>
+<TR><TD><DIV ALIGN="CENTER">
+<TABLE CELLPADDING=3 BORDER="1">
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1">
+Remaining </FONT></TD>
+<TD ALIGN="CENTER" COLSPAN=2><FONT SIZE="-1"> Pruned Nodes</FONT></TD>
+<TD ALIGN="CENTER" COLSPAN=2><FONT SIZE="-1"> Working
+Nodes</FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+Swaps </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> Number </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> Mbps </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> Number </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> Mbps </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+
+0 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0.0 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 38  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 4.3 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+1 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0.0 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 105 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 3.9 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+2 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0.0 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 116 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 3.6 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+3 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 9   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 2.5 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 56  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 2.3 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+4 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 82  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 2.0 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 32  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 2.2 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+5 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 143 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 2.0 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 19  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 1.2 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+6 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 107 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 2.4 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 9   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 1.1 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+7 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 62  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 2.0 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 1   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0.8 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+8 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 14  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 1.7 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0.0 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+9 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 16  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 2.4 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0.0 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+10 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 3  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 1.6 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0.0 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+11 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0.0 </FONT></TD>
+</TR>
+<TR><TD ALIGN="RIGHT"><FONT SIZE="-1"> 
+12 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 2  </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 1.9 </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0   </FONT></TD>
+<TD ALIGN="RIGHT"><FONT SIZE="-1"> 0.0 </FONT></TD>
+</TR>
+</TABLE></DIV>
+
+<P>
+
+<A NAME="table-PLcapprog"></A></TD></TR>
+</TABLE>
+</DIV><P></P><BR>
+
+<H1><A NAME="SECTION00060000000000000000">
+6 Related Work</A>
+</H1>
+
+<P>
+Using trees to aggregate data from distributed nodes is not a new
+idea. The seminal work of Chang on 
+Echo-Probe&nbsp;[<A
+ HREF="paper.html#changechoprobe">7</A>] formulated
+polling distant nodes and collecting data as a graph theory
+problem.
+More recently, Willow&nbsp;[<A
+ HREF="paper.html#willow">30</A>], SOMO&nbsp;[<A
+ HREF="paper.html#somo">34</A>], 
+DASIS&nbsp;[<A
+ HREF="paper.html#dasis">1</A>], Cone&nbsp;[<A
+ HREF="paper.html#bhagwan03cone">3</A>], SDIMS&nbsp;[<A
+ HREF="paper.html#SDIMS">31</A>],
+Ganglia&nbsp;[<A
+ HREF="paper.html#ganglia">21</A>], and PRISM&nbsp;[<A
+ HREF="paper.html#prism">15</A>],
+have used trees to aggregate attributes 
+Willow, SOMO, and Ganglia use
+one tree for all attributes, whereas SDIMS, Cone, and PRISM 
+use one tree per attribute.
+
+<P>
+Seaweed&nbsp;[<A
+ HREF="paper.html#Seaweed">22</A>] performs one-shot queries of small amounts of data
+and like San Ferm&#237;n is focused on completeness.   However, Seaweed trades completion
+time for completeness in that queries are expected to live for many hours or 
+even days as nodes come online and return aggregate data.   Seaweed uses a 
+supernode-based solution that further delays the timeliness of the initial 
+aggregate data.   Instead San Ferm&#237;n focuses on a different part of the design 
+space, robustly returning aggregate data from existing nodes in a timely manner.
+
+<P>
+CONCAST&nbsp;[<A
+ HREF="paper.html#concast">4</A>] implements many-to-one channels as a network service.
+It uses routers 
+to aggregate data over a single tree.   As the size of the aggregate data 
+grows the memory and processing requirements on routers becomes prohibitive.
+
+<P>
+Gossip and epidemic protocols have also been used for aggregation
+&nbsp;[<A
+ HREF="paper.html#1082470">18</A>,<A
+ HREF="paper.html#Gupta01">13</A>,<A
+ HREF="paper.html#jm04">17</A>,<A
+ HREF="paper.html#jkvs04">16</A>], including
+Astrolabe&nbsp;[<A
+ HREF="paper.html#astrolabe">29</A>]. Unstructured protocols that rely
+on random exchanges
+face a trade-off between precision and scalability.
+Structured protocols, such as Astrolabe, impose a 
+structure on the data exchanges that prevents duplication. This is
+at the cost of creating and maintaining a structure, and 
+confining the data exchanges to adhere to the structure. 
+
+<P>
+Data aggregation is also an issue in sensor networks. Unlike San Ferm&#237;n, 
+the major concerns in sensor networks are power consumption and 
+network traffic. 
+Examples of data aggregation in sensor networks are TAG&nbsp;[<A
+ HREF="paper.html#tag">20</A>], 
+Hourglass&nbsp;[<A
+ HREF="paper.html#hourglass">27</A>], and Cougar&nbsp;[<A
+ HREF="paper.html#cougar">33</A>].
+
+<P>
+Distributed query processing involves answering queries across a set of
+distributed nodes. The most relevant to our work are systems such as
+PIER&nbsp;[<A
+ HREF="paper.html#pier">14</A>], which stores tuples in a DHT as part of processing a query.
+Distributed query processing
+also encompasses performing queries on continuous streams of data,
+as is done in 
+Aurora&nbsp;[<A
+ HREF="paper.html#aurora">8</A>], Medusa&nbsp;[<A
+ HREF="paper.html#aurora">8</A>], and HiFi&nbsp;[<A
+ HREF="paper.html#hifi">11</A>].
+
+<P>
+There are several systems that have focused on aggregating data from 
+large data sets from a programming language perspective&nbsp;[<A
+ HREF="paper.html#MapReduce">10</A>,<A
+ HREF="paper.html#SAWZALL">24</A>].   However neither system focuses on sending large amounts data over
+the network.   
+
+<H1><A NAME="SECTION00070000000000000000">
+7 Conclusions</A>
+</H1>
+
+<P>
+This paper presents San Ferm&#237;n, a technique for aggregating large amounts of data
+that when aggregating 1MB of data provides 2-6 times better completeness than
+SDIMS, at 61-76% of the 
+completion time, and with better scalability characteristics. 
+San Ferm&#237;n has a peak node traffic more than 1/3 lower than that of SDIMS, which
+accounts for much of the higher completeness.
+Our analysis shows that when 10% of the nodes fail during aggregation
+San Ferm&#237;n still computes the aggregated result from 97% of the nodes.
+San Ferm&#237;n also scales well with the number of nodes or the data size -
+completion time increases by less than a factor of 4 
+if the number of nodes increases from 32 to 1024, and by about a
+factor of 2 as 
+the data size
+increases from 256KB to 1MB.   
+
+<P>
+
+<H1><A NAME="SECTION00080000000000000000">
+Acknowledgments</A>
+</H1>
+We would like to thank the 
+SDIMS group (especially Navendu Jain) for helping us
+use and evaluate SDIMS.  
+We would especially like to thank our shepherd Arun Venkataramani and the
+anonymous reviewers for their helpful feedback.
+
+<P>
+<FONT SIZE="-1"><FONT SIZE="-1">
+ </FONT></FONT>
+<H2><A NAME="SECTION00090000000000000000">
+Bibliography</A>
+</H2><DL COMPACT><DD><P></P><DT><A NAME="dasis">1</A>
+<DD>
+K.&nbsp;Albrecht, R.&nbsp;Arnold, M.&nbsp;G&#228;hwiler, and R.&nbsp;Wattenhofer.
+<BR>Aggregating information in peer-to-peer systems for improved join and
+  leave.
+<BR>In <EM>Peer-to-Peer Computing</EM>, 2004.
+
+<P></P><DT><A NAME="AllPairsPing">2</A>
+<DD>
+PlanetLab - All Sites Ping.
+<BR><TT>http://ping.ececs.uc.edu/ping/</TT>.
+
+<P></P><DT><A NAME="bhagwan03cone">3</A>
+<DD>
+R.&nbsp;Bhagwan, G.&nbsp;Varghese, and G.&nbsp;Voelker.
+<BR>Cone: Augmenting DHTs to support distributed resource discovery.
+<BR>Technical Report CS2003-0755, UCSD, 2003.
+
+<P></P><DT><A NAME="concast">4</A>
+<DD>
+K.&nbsp;Calvert, J.&nbsp;Griffioen, B.&nbsp;Mullins, A.&nbsp;Sehgal, and S.&nbsp;Wen.
+<BR>Concast: design and implementation of an active network service.
+<BR><EM>IEEE JSAC</EM>, 19(3), 2001.
+
+<P></P><DT><A NAME="castro02exploiting">5</A>
+<DD>
+M.&nbsp;Castro, P.&nbsp;Druschel, Y.&nbsp;Hu, and A.&nbsp;Rowstron.
+<BR>Exploiting network proximity in distributed hash tables.
+<BR>In <EM>FuDiCo</EM>, 2002.
+
+<P></P><DT><A NAME="castro02scribe">6</A>
+<DD>
+M.&nbsp;Castro, P.&nbsp;Druschel, A.&nbsp;Kermarrec, and A.&nbsp;Rowstron.
+<BR>SCRIBE: A large-scale and decentralized application-level multicast
+  infrastructure.
+<BR><EM>IEEE JSAC</EM>, 20(8), 2002.
+
+<P></P><DT><A NAME="changechoprobe">7</A>
+<DD>
+E.&nbsp;J.&nbsp;H. Chang.
+<BR>Echo algorithms: Depth parallel operations on general graphs.
+<BR><EM>IEEE TSE</EM>, 1982.
+
+<P></P><DT><A NAME="aurora">8</A>
+<DD>
+M.&nbsp;Cherniack, H.&nbsp;Balakrishnan, M.&nbsp;Balazinska, D.&nbsp;Carney, U.&nbsp;&#199;etintemel,
+  Y.&nbsp;Xing, and S.&nbsp;B. Zdonik.
+<BR>Scalable distributed stream processing.
+<BR>In <EM>CIDR</EM>, 2003.
+
+<P></P><DT><A NAME="CERT">9</A>
+<DD>
+M.&nbsp;Collins.
+<BR>Personal correspondance, Sept. 2006.
+
+<P></P><DT><A NAME="MapReduce">10</A>
+<DD>
+J.&nbsp;Dean and S.&nbsp;Ghemawat.
+<BR>MapReduce: Simplified data processing on large clusters.
+<BR>In <EM>OSDI</EM>, 2004.
+
+<P></P><DT><A NAME="hifi">11</A>
+<DD>
+M.&nbsp;J. Franklin, S.&nbsp;R. Jeffery, S.&nbsp;Krishnamurthy, F.&nbsp;Reiss, S.&nbsp;Rizvi, E.&nbsp;Wu,
+  O.&nbsp;Cooper, A.&nbsp;Edakkunni, and W.&nbsp;Hong.
+<BR>Design considerations for high fan-in systems: The HiFi approach.
+<BR>In <EM>CIDR</EM>, pages 290-304, 2005.
+
+<P></P><DT><A NAME="MPLS">12</A>
+<DD>
+J.&nbsp;Guicahrd, F.&nbsp;le&nbsp;Faucheur, and J.&nbsp;P. Vasseur.
+<BR><EM>Definitive MPLS Network Designs</EM>.
+<BR>Cisco Press, 2005.
+
+<P></P><DT><A NAME="Gupta01">13</A>
+<DD>
+I.&nbsp;Gupta, R.&nbsp;van Renesse, and K.&nbsp;P. Birman.
+<BR>Scalable fault-tolerant aggregation in large process groups.
+<BR>In <EM>IEEE DSN</EM>, 2001.
+
+<P></P><DT><A NAME="pier">14</A>
+<DD>
+R.&nbsp;Huebsch, J.&nbsp;M. Hellerstein, N.&nbsp;Lanham, B.&nbsp;T. Loo, S.&nbsp;Shenker, and I.&nbsp;Stoica.
+<BR>Querying the Internet with PIER.
+<BR>In <EM>VLDB</EM>, 2003.
+
+<P></P><DT><A NAME="prism">15</A>
+<DD>
+N.&nbsp;Jain, D.&nbsp;Kit, D.&nbsp;Mahajan, M.&nbsp;Dahlin, and Y.&nbsp;Zhang.
+<BR>PRISM: Precision integrated scalable monitoring.
+<BR>Technical Report TR-06-22, University of Texas, Feb. 2006.
+
+<P></P><DT><A NAME="jkvs04">16</A>
+<DD>
+M.&nbsp;Jelasity, W.&nbsp;Kowalczyk, and M.&nbsp;van Steen.
+<BR>An approach to massively distributed aggregate computing on
+  peer-to-peer networks.
+<BR>In <EM>Euromicro Conference on Parallel, Distributed and
+  Network-Based Processing</EM>, 2004.
+
+<P></P><DT><A NAME="jm04">17</A>
+<DD>
+M.&nbsp;Jelasity and A.&nbsp;Montresor.
+<BR>Epidemic-style proactive aggregation in large overlay networks.
+<BR>In <EM>ICDCS</EM>, 2004.
+
+<P></P><DT><A NAME="1082470">18</A>
+<DD>
+M.&nbsp;Jelasity, A.&nbsp;Montresor, and O.&nbsp;Babaoglu.
+<BR>Gossip-based aggregation in large dynamic networks.
+<BR><EM>ACM TOCS</EM>, 23(3):219-252, 2005.
+
+<P></P><DT><A NAME="Liblit:2004:CBI">19</A>
+<DD>
+B.&nbsp;R. Liblit.
+<BR><EM>Cooperative Bug Isolation</EM>.
+<BR>PhD thesis, University of California, Berkeley, Dec. 2004.
+
+<P></P><DT><A NAME="tag">20</A>
+<DD>
+S.&nbsp;Madden, M.&nbsp;J. Franklin, J.&nbsp;M. Hellerstein, and W.&nbsp;Hong.
+<BR>TAG: A Tiny AGgregation service for ad-hoc sensor networks.
+<BR>In <EM>OSDI</EM>, 2002.
+
+<P></P><DT><A NAME="ganglia">21</A>
+<DD>
+M.&nbsp;L. Massie, B.&nbsp;N. Chun, and D.&nbsp;E. Culler.
+<BR>The Ganglia distributed monitoring system: design, implementation,
+  and experience.
+<BR><EM>Parallel Computing</EM>, 30(7), July 2004.
+
+<P></P><DT><A NAME="Seaweed">22</A>
+<DD>
+D.&nbsp;Narayanan, A.&nbsp;Donnelly, R.&nbsp;Mortier, and A.&nbsp;Rowstron.
+<BR>Delay aware querying with Seaweed.
+<BR>In <EM>VLDB</EM>, 2006.
+
+<P></P><DT><A NAME="peterson02blueprint">23</A>
+<DD>
+L.&nbsp;Peterson, D.&nbsp;Culler, T.&nbsp;Anderson, and T.&nbsp;Roscoe.
+<BR>A blueprint for introducing disruptive technology into the
+  Internet.
+<BR>In <EM>HotNets</EM>, 2002.
+
+<P></P><DT><A NAME="SAWZALL">24</A>
+<DD>
+R.&nbsp;Pike, S.&nbsp;Dorward, R.&nbsp;Griesemer, and S.&nbsp;Quinlan.
+<BR>Interpreting the data: Parallel analysis with Sawzall.
+<BR><EM>Scientific Programming</EM>, 13(4):277-298, 2005.
+
+<P></P><DT><A NAME="DBMS">25</A>
+<DD>
+R.&nbsp;Ramakrishnan and J.&nbsp;Gehrke.
+<BR><EM>Database Management Systems</EM>.
+<BR>McGraw-Hill Higher Education, 2000.
+
+<P></P><DT><A NAME="rowstron01pastry">26</A>
+<DD>
+A.&nbsp;Rowstron and P.&nbsp;Druschel.
+<BR>Pastry: Scalable, decentralized object location, and routing for
+  large-scale peer-to-peer systems.
+<BR>In <EM>ICDCS</EM>, 2001.
+
+<P></P><DT><A NAME="hourglass">27</A>
+<DD>
+J.&nbsp;Shneidman, P.&nbsp;Pietzuch, J.&nbsp;Ledlie, M.&nbsp;Roussopoulos, M.&nbsp;Seltzer, and
+  M.&nbsp;Welsh.
+<BR>Hourglass: An infrastructure for connecting sensor networks and
+  applications.
+<BR>Technical Report TR-21-04, Harvard University, 2004.
+
+<P></P><DT><A NAME="stoicachord">28</A>
+<DD>
+I.&nbsp;Stoica, R.&nbsp;Morris, D.&nbsp;Karger, F.&nbsp;Kaashoek, and H.&nbsp;Balakrishnan.
+<BR>Chord: A scalable Peer-To-Peer lookup service for Internet
+  applications.
+<BR>In <EM>SIGCOMM</EM>, 2001.
+
+<P></P><DT><A NAME="astrolabe">29</A>
+<DD>
+R.&nbsp;van Renesse and K.&nbsp;Birman.
+<BR>Astrolabe: A robust and scalable technology for distributed system
+  monitoring, management, and data mining.
+<BR><EM>ACM TOCS</EM>, May 2003.
+
+<P></P><DT><A NAME="willow">30</A>
+<DD>
+R.&nbsp;van Renesse and A.&nbsp;Bozdog.
+<BR>Willow: DHT, aggregation, and publish/subscribe in one protocol.
+<BR>In <EM>International Workshop on Peer-to-Peer Systems (IPTPS)</EM>,
+  2004.
+
+<P></P><DT><A NAME="SDIMS">31</A>
+<DD>
+P.&nbsp;Yalagandula and M.&nbsp;Dahlin.
+<BR>A scalable distributed information management system.
+<BR>In <EM>SIGCOMM</EM>, 2004.
+
+<P></P><DT><A NAME="S3">32</A>
+<DD>
+P.&nbsp;Yalagandula, P.&nbsp;Sharma, S.&nbsp;Banerjee, S.&nbsp;Basu, and S.-J. Lee.
+<BR>S3: a scalable sensing service for monitoring large networked
+  systems.
+<BR>In <EM>SIGCOMM workshop on Internet network management</EM>, 2006.
+
+<P></P><DT><A NAME="cougar">33</A>
+<DD>
+Y.&nbsp;Yao and J.&nbsp;Gehrke.
+<BR>The Cougar approach to in-network query processing in sensor
+  networks.
+<BR><EM>SIGMOD</EM>, 31(3):9-18, Sept. 2002.
+
+<P></P><DT><A NAME="somo">34</A>
+<DD>
+Z.&nbsp;Zhang, S.-M. Shi, and J.&nbsp;Zhu.
+<BR>SOMO: Self-organized metadata overlay for resource management in
+  P2P DHT.
+<BR>In <EM>International Workshop on Peer-to-Peer Systems (IPTPS)</EM>,
+  2003.
+
+<P></P><DT><A NAME="zhao03tapestry">35</A>
+<DD>
+B.&nbsp;Zhao, L.&nbsp;Huang, J.&nbsp;Stribling, S.&nbsp;Rhea, A.&nbsp;Joseph, and J.&nbsp;Kubiatowicz.
+<BR>Tapestry: a resilient global-scale overlay for service deployment.
+<BR><EM>IEEE JSAC</EM>, 2003.
+</DL>
+
+</FONT></FONT>
+<P>
+<FONT SIZE="-1"></FONT>
+<H1><A NAME="SECTION000100000000000000000">
+About this document ...</A>
+</H1><FONT SIZE="-1"><FONT SIZE="-1">
+ </FONT></FONT><P>
+This document was generated using the
+<A HREF="http://www.latex2html.org/"><STRONG>LaTeX</STRONG>2<tt>HTML</tt></A> translator Version 2002-2-1 (1.71)
+<P>
+Copyright &#169; 1993, 1994, 1995, 1996,
+<A HREF="http://cbl.leeds.ac.uk/nikos/personal.html">Nikos Drakos</A>, 
+Computer Based Learning Unit, University of Leeds.
+<BR>Copyright &#169; 1997, 1998, 1999,
+<A HREF="http://www.maths.mq.edu.au/~ross/">Ross Moore</A>, 
+Mathematics Department, Macquarie University, Sydney.
+<P>
+The command line arguments were: <BR>
+ <STRONG>latex2html</STRONG> <TT>-split 0 -show_section_numbers -local_icons -no_navigation paper.tex</TT>
+<P>
+The translation was initiated by Justin A Cappos on 2008-02-19<FONT SIZE="-1"></FONT><BR><HR><H4>Footnotes</H4>
+<DL>
+<DT><A NAME="fnm2">... Forest<SUP><IMG
+ WIDTH="6" HEIGHT="14" ALIGN="BOTTOM" BORDER="0"
+ SRC="img4.png"
+ ALT="% latex2html id marker 2472
+\setcounter{footnote}{2}\fnsymbol{footnote}"></SUP></A></DT>
+<DD>This work was supported in part by the NSF 
+under grant CCR-0435292
+
+</DD>
+</DL><BR><HR>
+<ADDRESS>
+Justin A Cappos
+2008-02-19
+</ADDRESS>
+</BODY>
+</HTML>
