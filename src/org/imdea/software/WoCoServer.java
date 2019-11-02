@@ -8,6 +8,10 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class WoCoServer {
 
@@ -17,6 +21,7 @@ public class WoCoServer {
 	private HashMap<Integer, HashMap<String, Integer>> results;
 	private long startTime;
 	private long currTime;
+	private static int threadCount;
 
 	/**
 	 * Performs the word count on a document. It first converts the document to
@@ -42,11 +47,28 @@ public class WoCoServer {
 
 		long startTime = System.nanoTime();
 		String[] words = asciiLine.toString().split(" ");
-		for (String s : words) {
-			if (wc.containsKey(s)) {
-				wc.put(s, wc.get(s) + 1);
-			} else {
-				wc.put(s, 1);
+		Stream<String> streamOfWords = Arrays.stream(words);
+		ExecutorService executorService;
+		if (threadCount > 1) {
+			executorService = Executors.newFixedThreadPool(threadCount);
+			executorService.execute(() -> {
+				for (String s : words) {
+					if (wc.containsKey(s)) {
+						wc.put(s, wc.get(s) + 1);
+					} else {
+						wc.put(s, 1);
+					}
+				}
+			});
+		}
+		
+		else {
+			for (String s : words) {
+				if (wc.containsKey(s)) {
+					wc.put(s, wc.get(s) + 1);
+				} else {
+					wc.put(s, 1);
+				}
 			}
 		}
 		long currTime = System.nanoTime();
@@ -200,15 +222,7 @@ public class WoCoServer {
 		String lAddr = args[0];
 		int lPort = Integer.parseInt(args[1]);
 		boolean cMode = Boolean.parseBoolean(args[2]);
-		int threadCount = Integer.parseInt(args[3]);
-
-		if (threadCount > 1) {
-			//TODO: will have to implement multithreading
-			System.out.println("FEATURE NOT IMPLEMENTED");
-			System.exit(0);
-
-		}
-
+		threadCount = Integer.parseInt(args[3]);
 
 		WoCoServer server = new WoCoServer();
 
@@ -264,7 +278,7 @@ public class WoCoServer {
 							long startTime = System.nanoTime();
 							ba = ByteBuffer.wrap(server.serializeResultForClient(clientId).getBytes());
 							long currTime = System.nanoTime();
-							System.out.println("Time spent serializing the document " + (float) ((currTime-startTime)/1000000000.0)));
+							System.out.println("Time spent serializing the document " + (float) ((currTime-startTime)/1000000000.0));
 							client.write(ba);
 						}
 					} else {
