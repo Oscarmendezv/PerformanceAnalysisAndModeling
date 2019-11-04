@@ -10,8 +10,6 @@ import java.nio.channels.SocketChannel;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class WoCoServer {
 
@@ -206,8 +204,14 @@ public class WoCoServer {
 
     String lAddr = args[0];
     int lPort = Integer.parseInt(args[1]);
-    boolean cMode = Boolean.parseBoolean(args[2]);
+    int trueOrFalse = Integer.parseInt(args[2]);
     int threadCount = Integer.parseInt(args[3]);
+    boolean cMode;
+
+    if (trueOrFalse == 1)
+      cMode = true;
+    else
+      cMode = false;
 
     WoCoServer server = new WoCoServer();
 
