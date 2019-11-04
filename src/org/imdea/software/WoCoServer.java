@@ -54,7 +54,7 @@ public class WoCoServer {
         wc.put(s, 1);
       }
     }
-    
+
     long currTime = System.nanoTime();
     System.out.println("Time spent counting words " + (float) ((currTime - startTime) / 1000000000.0));
   }
@@ -282,6 +282,52 @@ public class WoCoServer {
           System.out.println("An exception ocurred: " + e.getMessage());
         }
       });
+    } else {
+      ByteBuffer ba;
+      while (true) {
+        selector.select();
+
+        Set<SelectionKey> readyKeys = selector.selectedKeys();
+        Iterator<SelectionKey> iterator = readyKeys.iterator();
+
+        // aqui se mide t0d0 el tiempo de recepcion del documento
+        while (iterator.hasNext()) {
+          SelectionKey key = iterator.next();
+
+          if (key.isAcceptable()) {
+            SocketChannel client = serverSocket.accept();
+
+            client.configureBlocking(false);
+
+            client.register(selector, SelectionKey.OP_READ);
+            System.out.println("Connection Accepted: " + client.getLocalAddress() + "\n");
+
+          } else if (key.isReadable()) {
+            SocketChannel client = (SocketChannel) key.channel();
+            int clientId = client.hashCode();
+
+            bb.rewind();
+            int readCnt = client.read(bb);
+
+            if (readCnt > 0) {
+              String result = new String(bb.array(), 0, readCnt);
+
+              boolean hasResult = server.receiveData(clientId, result, cMode);
+
+              if (hasResult) {
+                long startTime = System.nanoTime();
+                ba = ByteBuffer.wrap(server.serializeResultForClient(clientId).getBytes());
+                long currTime = System.nanoTime();
+                System.out.println("Time spent serializing the document " + (float) ((currTime - startTime) / 1000000000.0));
+                client.write(ba);
+              }
+            } else {
+              key.cancel();
+            }
+          }
+          iterator.remove();
+        }
+      }
     }
 
   }
