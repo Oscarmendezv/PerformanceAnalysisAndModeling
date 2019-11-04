@@ -1,0 +1,39 @@
+
+W
+squid:S106‡"9Replace this use of System.out or System.err by a logger.(«öó8œ¦Óêâ-
+@squid:S1643Ë"Use a StringBuilder instead.(‹§±øûÿÿÿÿ8§Çêâ-
+jsquid:S2095å"FUse try-with-resources or close this "Selector" in a "finally" clause.(ŠŞö ùÿÿÿÿ8œ¦Óêâ-
+Msquid:S1481ï".Remove this unused "selectKey" local variable.(ó¡Ñæ8œ¦Óêâ-
+Ssquid:S2864ª"4Iterate over the "entrySet" instead of the "keySet".(Å‰Ÿœ8§Çêâ-
+W
+squid:S106Ú"9Replace this use of System.out or System.err by a logger.(ğøË‰8§Çêâ-
+W
+squid:S106"9Replace this use of System.out or System.err by a logger.(Â–ş´8§Çêâ-
+usquid:S2095ç"QUse try-with-resources or close this "ServerSocketChannel" in a "finally" clause.(şìªáúÿÿÿÿ8§Çêâ-
+usquid:S3776#"RRefactor this method to reduce its Cognitive Complexity from 22 to the 15 allowed.(ÚåË¢ÿÿÿÿÿ8¯İàêâ-
+V
+squid:S106K"9Replace this use of System.out or System.err by a logger.(ÚŞ¾î8§Çêâ-
+\
+squid:S106"9Replace this use of System.out or System.err by a logger.(çäêûÿÿÿÿÿ8§Çêâ-
+[
+squid:S106}"9Replace this use of System.out or System.err by a logger.(Ïì£Áşÿÿÿÿ8§Çêâ-
+squid:S1319#"jThe type of the "wc" object should be an interface such as "Map" rather than the implementation "HashMap".(ÚåË¢ÿÿÿÿÿ8şô¯éâ-
+hsquid:UselessImportCheck"8Remove this unused import 'java.util.stream.Collectors'.(Óóº´úÿÿÿÿ8á”Îêâ-
+qsquid:S3776×"RRefactor this method to reduce its Cognitive Complexity from 18 to the 15 allowed.(œû¿Ø8§Çêâ-
+;squid:S1643Å"Use a StringBuilder instead.(·ã¬¨8§Çêâ-
+|squid:S2293R"YReplace the type specification in this constructor call with the diamond operator ("<>").(Êû€Àúÿÿÿÿ8»®Æá-
+\
+squid:S106™"9Replace this use of System.out or System.err by a logger.(ç’ò¬ıÿÿÿÿ8œ¦Óêâ-
+\
+squid:S106Ñ"9Replace this use of System.out or System.err by a logger.(¦´£²ıÿÿÿÿ8§Çêâ-
+Fsquid:S2189ö""Add an end condition to this loop.(˜ïˆÿÿÿÿÿ8œ¦Óêâ-
+Gsquid:S1148…"#Use a logger to log this exception.(€ÉÔ…ıÿÿÿÿ8§Çêâ-
+;squid:S1643É"Use a StringBuilder instead.(„ïîÖ8§Çêâ-
+Xsquid:S1854à"9Remove this useless assignment to local variable "cMode".(Îß¬¶8§Çêâ-
+;squid:S1643Ã"Use a StringBuilder instead.(„ïîÖ8§Çêâ-
+Isquid:S1481à"*Remove this unused "cMode" local variable.(Îß¬¶8§Çêâ-
+_squid:S18542"ARemove this useless assignment to local variable "streamOfWords".(É¬ô8á”Îêâ-
+\squid:S1854ï"=Remove this useless assignment to local variable "selectKey".(ó¡Ñæ8œ¦Óêâ-
+Psquid:S14812"2Remove this unused "streamOfWords" local variable.(É¬ô8á”Îêâ-
+vsquid:S3776¶"RRefactor this method to reduce its Cognitive Complexity from 18 to the 15 allowed.(šÚôŠÿÿÿÿÿ8§Çêâ-
+|squid:S2293S"YReplace the type specification in this constructor call with the diamond operator ("<>").(â¹ËÕÿÿÿÿÿ8§Çêâ-

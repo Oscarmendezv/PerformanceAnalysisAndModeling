@@ -1,0 +1,41 @@
+
+U
+squid:S106¶"9Replace this use of System.out or System.err by a logger.(ªÓ¼áşÿÿÿÿ
+Osquid:S1135Â"2Complete the task associated to this TODO comment.(ÕÌ®şÿÿÿÿ
+®%squid:RedundantThrowsDeclarationCheckK"xRemove the declaration of thrown exception 'java.net.UnknownHostException' which is a subclass of 'java.io.IOException'.(ãÃÒûúÿÿÿÿ
+U
+squid:S106±"9Replace this use of System.out or System.err by a logger.(ÖË‡•ıÿÿÿÿ
+Tsquid:UselessImportCheck"1Remove this unused import 'java.util.LinkedList'.(»Äğ1
+osquid:UselessImportCheck"FRemove this unused import 'java.util.concurrent.atomic.AtomicBoolean'.(§­‹¼üÿÿÿÿ
+„squid:S1319z"mThe return type of this method should be an interface such as "Map" rather than the implementation "HashMap".(ÏëÀ»
+Ysquid:UselessImportCheck"0Remove this unused import 'java.util.Hashtable'.(Œ»ÏÊüÿÿÿÿ
+lsquid:S3008"PRename this field "DEBUG" to match the regular expression '^[a-z][a-zA-Z0-9]*$'.(Ö‚ÆÖûÿÿÿÿ
+P
+squid:S106Ÿ"9Replace this use of System.out or System.err by a logger.(‹šè‘
+hsquid:S2095."LUse try-with-resources or close this "BufferedReader" in a "finally" clause.(õñûºÿÿÿÿÿ
+@squid:S1125á"(Remove the literal "true" boolean value.(÷¬Í¼
+Fsquid:S1125š")Remove the literal "false" boolean value.(õô—·ûÿÿÿÿ
+P
+squid:S106¨"9Replace this use of System.out or System.err by a logger.(Å¸Ş
+qsquid:S2293‰"YReplace the type specification in this constructor call with the diamond operator ("<>").(àÑäÊ
+qsquid:S2293‚"YReplace the type specification in this constructor call with the diamond operator ("<>").(›ˆÜÃ
+csquid:UselessImportCheck":Remove this unused import 'java.io.FileNotFoundException'.(·î™ùÿÿÿÿ
+O
+squid:S106¯"9Replace this use of System.out or System.err by a logger.(°•Ş
+O
+squid:S106³"9Replace this use of System.out or System.err by a logger.(°•Ş
+ª%squid:RedundantThrowsDeclarationCheckÉ"xRemove the declaration of thrown exception 'java.net.UnknownHostException' which is a subclass of 'java.io.IOException'.(Ì›Ï¤
+U
+squid:S106Í"9Replace this use of System.out or System.err by a logger.(šó‚˜ıÿÿÿÿ
+U
+squid:S106â"9Replace this use of System.out or System.err by a logger.(®ıáëûÿÿÿÿ
+]squid:CallToDeprecatedMethod…"/Remove this use of "Integer"; it is deprecated.(Ğ¢ŸÏùÿÿÿÿ
+Zsquid:UselessImportCheck"6Remove this unused import 'javax.swing.plaf.SliderUI'.(’ê„å
+@squid:S1148Ã"#Use a logger to log this exception.(€ÉÔ…ıÿÿÿÿ
+U
+squid:S106¬"9Replace this use of System.out or System.err by a logger.(¹ñâğıÿÿÿÿ
+psquid:S2293V"YReplace the type specification in this constructor call with the diamond operator ("<>").(â†¼
+Fsquid:S2140Ö")Use "java.util.Random.nextInt()" instead.(ÀÓ™¿üÿÿÿÿ
+@squid:S1125"(Remove the literal "true" boolean value.(÷¬Í¼
+P
+squid:S106®"9Replace this use of System.out or System.err by a logger.(Û•Ê
